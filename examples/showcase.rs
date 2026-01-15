@@ -151,7 +151,7 @@ impl App {
         Self {
             current_tab: DemoTab::Layout,
             menu_bar,
-            split: ResizableSplit::new(35),
+            split: ResizableSplit::new(50),
             tree_state,
             tree_navigator: TreeNavigator::new(),
             show_dialog: false,

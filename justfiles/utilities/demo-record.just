@@ -1,12 +1,13 @@
-# Record the automated demo
+# Record the automated demo (VHS - no icons support)
 # Usage: just demo-record
-# Example: just demo-record
-
+# Note: Icons won't show in VHS-generated GIF. For icons, use demo-interactive.
 demo-record:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    echo "📹 Recording automated demo..."
+    echo "📹 Recording automated demo (VHS)..."
+    echo "⚠️  Note: Icons require Nerd Fonts which VHS doesn't support."
+    echo "   For icons, use: just demo-interactive"
 
     # Check if VHS is installed
     if ! command -v vhs >/dev/null 2>&1; then
@@ -28,3 +29,5 @@ demo-record:
 
     echo "✅ Demo recorded!"
     echo "📹 GIF: demo/ratatui-toolkit-demo.gif ($(du -h demo/ratatui-toolkit-demo.gif | cut -f1 2>/dev/null || echo "N/A"))"
+    echo ""
+    echo "💡 Tip: For icons in your demo, run: just demo-interactive"

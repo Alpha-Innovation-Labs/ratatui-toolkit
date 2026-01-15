@@ -1,9 +1,8 @@
 # ratatui-toolkit
 
 [![Crates.io](https://img.shields.io/crates/v/ratatui-toolkit.svg)](https://crates.io/crates/ratatui-toolkit)
-[![Documentation](https://docs.rs/ratatui-toolkit/badge.svg)](https://docs.rs/ratatui-toolkit)
+[![Documentation](https://img.shields.io/docsrs/ratatui-toolkit)](https://docs.rs/ratatui-toolkit)
 [![License](https://img.shields.io/crates/l/ratatui-toolkit.svg)](LICENSE-MIT)
-[![CI](https://github.com/alpha-innovation-labs/ratatui-toolkit/workflows/CI/badge.svg)](https://github.com/alpha-innovation-labs/ratatui-toolkit/actions)
 
 ![ratatui-toolkit Demo](demo/ratatui-toolkit-demo.gif)
 
