@@ -2,96 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no"
-    />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/fira_code.min.css"
-    />
-    <link data-trunk rel="rust"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ratatui-toolkit Demo</title>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      html, body {
-        width: 100%;
-        height: 100vh;
-        background-color: #1a1a1a;
-        overflow: hidden;
-      }
       body {
+        margin: 20px;
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        align-content: center;
-        font-family: 'Fira Code', monospace;
+        background-color: #121212;
       }
-      #ratatui-container {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background-color: #1a1a1a;
-      }
-      #ratatui-container table {
-        border-collapse: collapse;
-        font-family: 'Fira Code', monospace;
+      pre {
+        font-family: monospace;
         font-size: 14px;
-        line-height: 1.2;
-      }
-      #ratatui-container td {
-        padding: 0;
-        margin: 0;
-      }
-      .rt-border {
-        border: 1px solid #444;
-      }
-      .rt-border-left {
-        border-left: 1px solid #444;
-      }
-      .rt-border-right {
-        border-right: 1px solid #444;
-      }
-      .rt-border-top {
-        border-top: 1px solid #444;
-      }
-      .rt-border-bottom {
-        border-bottom: 1px solid #444;
-      }
-      .rt-bg-dark-gray {
-        background-color: #333;
-      }
-      .rt-fg-white {
-        color: #fff;
-      }
-      .rt-fg-yellow {
-        color: #ffd700;
-      }
-      .rt-bold {
-        font-weight: bold;
+        margin: 0px;
       }
     </style>
+    <link data-trunk rel="rust"/>
   </head>
-  <body>
-    <div id="ratatui-container"></div>
-    <script type="module">
-      window.addEventListener("TrunkApplicationStarted", (_) => {
-        console.log("ratatui-toolkit demo initialized");
-      });
-
-      // Prevent default browser behavior for Tab and other keys
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Tab' || e.key === '/' || (e.ctrlKey && e.key === 'f')) {
-          e.preventDefault();
-        }
-      }, { passive: false });
-    </script>
-  </body>
+  <body></body>
 </html>
