@@ -13,13 +13,15 @@ help:
     @echo "\033[1;36m======================================\033[0m"
     @echo ""
     @echo "\033[1;35m  Most Common Commands:\033[0m"
+    @echo "  just \033[0;33mrun\033[0m                      \033[0;32mRun compiled showcase demo\033[0m"
     @echo "  just \033[0;33mdev\033[0m                     \033[0;32mStart showcase demo\033[0m"
     @echo "  just \033[0;33mexample\033[0m                 \033[0;32mRun specific example\033[0m"
     @echo "  just \033[0;33mtest\033[0m                    \033[0;32mRun all tests\033[0m"
     @echo "  just \033[0;33mcheck\033[0m                   \033[0;32mRun all checks\033[0m"
     @echo ""
     @echo "\033[1;35m  Development:\033[0m"
-    @echo "  just \033[0;33mdev\033[0m                     \033[0;32mRun showcase demo\033[0m"
+    @echo "  just \033[0;33mrun\033[0m                      \033[0;32mRun compiled showcase demo\033[0m"
+    @echo "  just \033[0;33mdev\033[0m                     \033[0;32mStart showcase demo\033[0m"
     @echo "  just \033[0;33mexample <name>\033[0m          \033[0;32mRun specific example\033[0m"
     @echo ""
     @echo "\033[1;35m  Building:\033[0m"
@@ -52,6 +54,7 @@ help:
 # ============================================================================
 # Development Commands
 # ============================================================================
+import 'justfiles/development/run.just'
 import 'justfiles/development/dev.just'
 import 'justfiles/development/example.just'
 

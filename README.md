@@ -5,6 +5,8 @@
 [![License](https://img.shields.io/crates/l/ratatui-toolkit.svg)](LICENSE-MIT)
 [![CI](https://github.com/alpha-innovation-labs/ratatui-toolkit/workflows/CI/badge.svg)](https://github.com/alpha-innovation-labs/ratatui-toolkit/actions)
 
+![ratatui-toolkit Demo](demo/ratatui-toolkit-demo.gif)
+
 A comprehensive collection of reusable TUI components for [ratatui](https://ratatui.rs/), the Rust terminal UI library.
 
 ## Features
