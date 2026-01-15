@@ -22,6 +22,8 @@ help:
     @echo "\033[1;35m  Development:\033[0m"
     @echo "  just \033[0;33mrun\033[0m                      \033[0;32mRun compiled showcase demo\033[0m"
     @echo "  just \033[0;33mdev\033[0m                     \033[0;32mStart showcase demo\033[0m"
+    @echo "  just \033[0;33mweb-serve\033[0m               \033[0;32mServe web demo (localhost:8080)\033[0m"
+    @echo "  just \033[0;33mweb-build\033[0m               \033[0;32mBuild web demo for production\033[0m"
     @echo "  just \033[0;33mexample <name>\033[0m          \033[0;32mRun specific example\033[0m"
     @echo ""
     @echo "\033[1;35m  Building:\033[0m"
@@ -54,6 +56,7 @@ help:
 # ============================================================================
 # Development Commands
 # ============================================================================
+import 'justfiles/development/web.just'
 import 'justfiles/development/run.just'
 import 'justfiles/development/dev.just'
 import 'justfiles/development/example.just'
