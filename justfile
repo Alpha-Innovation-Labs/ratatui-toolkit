@@ -118,8 +118,8 @@ pub:
     cargo publish
     
     # Install locally immediately (don't wait for crates.io)
-    echo "💿 Installing from local source..."
-    cargo install --path . --force
+    # echo "💿 Installing from local source..."
+    # cargo install --path . --force
     
-    echo "✅ Published version $NEW_VERSION to crates.io and installed locally"
+    echo "✅ Published version $NEW_VERSION to crates.io"
     echo "You can now run: lazydomain"
