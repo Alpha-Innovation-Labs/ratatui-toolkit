@@ -25,7 +25,8 @@ fn main() -> std::io::Result<()> {
     ];
     let tabs_for_render = tabs.clone();
 
-    let terminal = Terminal::new(DomBackend::new()?)?;
+    let backend = DomBackend::new()?;
+    let terminal = Terminal::new(backend)?;
 
     terminal.on_key_event({
         let current_tab = current_tab.clone();
@@ -36,7 +37,7 @@ fn main() -> std::io::Result<()> {
                 KeyCode::Tab => {
                     *tab = (*tab + 1) % tabs_for_keys.len();
                 }
-                KeyCode::Char('q') => std::process::exit(0),
+                KeyCode::Esc => std::process::exit(0),
                 _ => {}
             }
         }
@@ -59,15 +60,15 @@ fn main() -> std::io::Result<()> {
             0 => vec![
                 "  ResizableSplit - Drag or use arrows",
                 "",
-                "  ┌──────────┐  ┌──────────────────┐",
-                "  │   Left   │  │     Right        │",
-                "  │          │  │                  │",
-                "  │          │  │                  │",
-                "  └──────────┘  └──────────────────┘",
+                "  +----------+  +------------------+",
+                "  |   Left   |  |     Right        |",
+                "  |          |  |                  |",
+                "  |          |  |                  |",
+                "  +----------+  +------------------+",
                 "",
-                "  • Vertical/Horizontal splits",
-                "  • Mouse drag support",
-                "  • Min/Max ratio constraints",
+                "  * Vertical/Horizontal splits",
+                "  * Mouse drag support",
+                "  * Min/Max ratio constraints",
             ],
             1 => vec![
                 "  TreeView - Navigate with j/k/h/l",
@@ -85,13 +86,13 @@ fn main() -> std::io::Result<()> {
             2 => vec![
                 "  Dialogs - i/w/e/c for types, Esc to close",
                 "",
-                "      ┌──────────────────────────┐",
-                "      │     Info Dialog          │",
-                "      │                          │",
-                "      │  This is an info message │",
-                "      │                          │",
-                "      │        [OK]              │",
-                "      └──────────────────────────┘",
+                "        +----------------------+",
+                "        |     Info Dialog      |",
+                "        |                      |",
+                "        |  This is an info msg |",
+                "        |                      |",
+                "        |        [OK]          |",
+                "        +----------------------+",
                 "",
                 "  i: Info | w: Warning | e: Error | c: Confirm",
             ],
@@ -104,9 +105,9 @@ fn main() -> std::io::Result<()> {
                 "  markdown to styled `ratatui::Text`.",
                 "",
                 "  ## Features",
-                "  • Bold and italic text",
-                "  • Inline code snippets",
-                "  • Code blocks with syntax",
+                "  * Bold and italic text",
+                "  * Inline code snippets",
+                "  * Code blocks with syntax",
             ],
             4 => vec![
                 "  ClickableScrollbar",
@@ -124,15 +125,15 @@ fn main() -> std::io::Result<()> {
             5 => vec![
                 "  StatusLine - Vim modes",
                 "",
-                "  ┌──────────────────────────────────┐",
-                "  │ NORMAL │ src/main.rs │ rust:1.70 │",
-                "  └──────────────────────────────────┘",
+                "  +----------------------------------+",
+                "  | NORMAL | src/main.rs | rust:1.70 |",
+                "  +----------------------------------+",
                 "",
                 "  Vim-like mode indicator",
-                "  • NORMAL - Command mode",
-                "  • INSERT - Edit mode",
-                "  • VISUAL - Selection mode",
-                "  • COMMAND - :command mode",
+                "  * NORMAL - Command mode",
+                "  * INSERT - Edit mode",
+                "  * VISUAL - Selection mode",
+                "  * COMMAND - :command mode",
             ],
             6 => vec![
                 "  VT100Term - Embedded Terminal",
