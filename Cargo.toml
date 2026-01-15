@@ -69,10 +69,6 @@ portable-pty = { version = "0.8", optional = true }
 
 # File icons (feature-gated)
 devicons = { version = "0.6", optional = true }
-ratzilla = "0.2.0"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 tempfile = "3"

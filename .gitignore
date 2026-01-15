@@ -16,3 +16,4 @@ Cargo.lock
 *.bak
 target
 .serena
+web-demo
