@@ -1,7 +1,7 @@
 //! Master Layout - Top-level orchestrator for tabs, navigation, and modes
 
-use crate::master_layout::MasterLayoutKeyBindings;
 use super::{InteractionMode, PaneId, Tab};
+use crate::master_layout::MasterLayoutKeyBindings;
 use crate::{MenuBar, MenuItem};
 use crossterm::event::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -44,6 +44,21 @@ pub enum EventResult {
 /// - No Ctrl-A to exit
 /// - Tab/Shift+Tab switch panes and route input to the new pane
 /// - Global keys (q, 1-9) still work for app control
+///
+/// ## Per-Pane Focus Mode
+///
+/// Panes can override auto-focus behavior by implementing `requires_focus_mode() -> true`:
+/// - Panes returning `false` (default): receive input immediately when selected
+/// - Panes returning `true`: require Enter to focus, Ctrl+A to exit (modal behavior)
+///
+/// This allows hybrid layouts where some panes (e.g., tree navigation) auto-passthrough
+/// while others (e.g., chat, terminal) require explicit focus.
+///
+/// | `auto_focus` | `requires_focus_mode()` | Behavior |
+/// |--------------|-------------------------|----------|
+/// | false        | any                     | Modal (Enter to focus, Ctrl+A to exit) |
+/// | true         | false                   | Auto-passthrough (input routes immediately) |
+/// | true         | true                    | Modal for this pane only |
 ///
 /// # Key Bindings
 ///
@@ -361,9 +376,21 @@ impl MasterLayout {
         match self.mode.clone() {
             InteractionMode::Layout { selected_pane } => {
                 // Auto-focus mode: route keys directly to selected pane
+                // (unless the pane requires explicit focus mode)
                 if self.auto_focus {
                     if let Some(pane_id) = selected_pane {
-                        return self.handle_auto_focus_layout_key(key, pane_id);
+                        // Check if the pane requires explicit focus mode
+                        let requires_focus = self
+                            .active_tab()
+                            .and_then(|tab| tab.pane_container().get_pane(pane_id))
+                            .map(|pane| pane.requires_focus_mode())
+                            .unwrap_or(false);
+
+                        if !requires_focus {
+                            // Pane allows auto-passthrough, route input immediately
+                            return self.handle_auto_focus_layout_key(key, pane_id);
+                        }
+                        // Pane requires focus mode, fall through to modal behavior
                     }
                 }
 
@@ -765,6 +792,7 @@ mod tests {
         key_count: usize,
         mouse_count: usize,
         last_key: Option<KeyEvent>,
+        requires_focus: bool,
     }
 
     impl MockContent {
@@ -774,6 +802,17 @@ mod tests {
                 key_count: 0,
                 mouse_count: 0,
                 last_key: None,
+                requires_focus: false,
+            }
+        }
+
+        fn with_requires_focus(title: &str) -> Self {
+            Self {
+                title: title.to_string(),
+                key_count: 0,
+                mouse_count: 0,
+                last_key: None,
+                requires_focus: true,
             }
         }
     }
@@ -800,6 +839,10 @@ mod tests {
 
         fn render_content(&mut self, _area: Rect, _frame: &mut ratatui::Frame) {
             // Mock implementation - do nothing
+        }
+
+        fn requires_focus_mode(&self) -> bool {
+            self.requires_focus
         }
     }
 
@@ -2153,5 +2196,234 @@ mod tests {
         // Should not panic
         let _result = layout.handle_mouse_event(mouse);
         // Result could be Consumed or NotHandled depending on what was clicked
+    }
+
+    // === PER-PANE FOCUS MODE TESTS ===
+
+    // Helper to create a layout with mixed panes:
+    // - Pane 1: requires_focus_mode = true (modal behavior even with auto_focus)
+    // - Pane 2: requires_focus_mode = false (auto-passthrough with auto_focus)
+    // Returns (layout, chat_pane_id, tree_pane_id)
+    fn create_mixed_focus_layout() -> (MasterLayout, PaneId, PaneId) {
+        let mut layout = MasterLayout::new();
+
+        let mut tab = Tab::new("Mixed Tab");
+        // First pane requires explicit focus (like a chat/terminal)
+        let chat_id = PaneId::new("chat");
+        let pane1 = Pane::new(chat_id, Box::new(MockContent::with_requires_focus("Chat")));
+        // Second pane auto-passthroughs (like a tree list)
+        let tree_id = PaneId::new("tree");
+        let pane2 = Pane::new(tree_id, Box::new(MockContent::new("TreeList")));
+        tab.add_pane(pane1);
+        tab.add_pane(pane2);
+
+        layout.add_tab(tab);
+        (layout, chat_id, tree_id)
+    }
+
+    #[test]
+    fn test_requires_focus_mode_blocks_auto_passthrough() {
+        let (mut layout, chat_id, _tree_id) = create_mixed_focus_layout();
+        layout = layout.with_auto_focus(true);
+
+        // First pane (chat) should be selected by default
+        let selected = layout.mode().selected_pane();
+        assert!(selected.is_some());
+        assert_eq!(selected.unwrap(), chat_id);
+
+        // Press 'x' key - should NOT be routed to pane (modal behavior)
+        // because chat requires focus mode
+        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        // Should NOT be consumed (falls through to Layout Mode which doesn't handle 'x')
+        assert_eq!(result, EventResult::NotHandled);
+
+        // Should still be in Layout Mode
+        assert!(layout.mode().is_layout());
+    }
+
+    #[test]
+    fn test_requires_focus_mode_enter_to_focus() {
+        let (mut layout, chat_id, _tree_id) = create_mixed_focus_layout();
+        layout = layout.with_auto_focus(true);
+
+        // First pane (chat) requires focus mode
+        let selected = layout.mode().selected_pane();
+        assert_eq!(selected.unwrap(), chat_id);
+
+        // Press Enter - should enter Focus Mode (modal behavior)
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+        assert!(layout.mode().is_focus());
+        assert_eq!(layout.mode().focused_pane().unwrap(), chat_id);
+    }
+
+    #[test]
+    fn test_requires_focus_mode_ctrl_a_exits() {
+        let (mut layout, chat_id, _tree_id) = create_mixed_focus_layout();
+        layout = layout.with_auto_focus(true);
+
+        // First pane (chat) requires focus mode
+        let pane_id = layout.mode().selected_pane().unwrap();
+        assert_eq!(pane_id, chat_id);
+
+        // Enter focus mode
+        layout.enter_focus_mode(pane_id);
+        assert!(layout.mode().is_focus());
+
+        // Press Ctrl-A - should exit Focus Mode
+        let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL);
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+        assert!(layout.mode().is_layout());
+    }
+
+    #[test]
+    fn test_no_requires_focus_auto_passthrough() {
+        let (mut layout, _chat_id, tree_id) = create_mixed_focus_layout();
+        layout = layout.with_auto_focus(true);
+
+        // Navigate to second pane (tree) which doesn't require focus
+        layout.select_next_pane();
+        let selected = layout.mode().selected_pane();
+        assert_eq!(selected.unwrap(), tree_id);
+
+        // Press 'x' key - should be routed to pane immediately (auto-passthrough)
+        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+
+        // Should still be in Layout Mode (auto-focus mode)
+        assert!(layout.mode().is_layout());
+    }
+
+    #[test]
+    fn test_mixed_layout_navigation() {
+        let (mut layout, chat_id, _tree_id) = create_mixed_focus_layout();
+        layout = layout.with_auto_focus(true);
+
+        // Start on first pane (chat - requires focus)
+        assert_eq!(layout.mode().selected_pane().unwrap(), chat_id);
+
+        // Press Tab to move to next pane
+        let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        // Should be NotHandled because chat requires focus mode (modal behavior)
+        // In modal behavior, Tab is not handled in Layout Mode
+        assert_eq!(result, EventResult::NotHandled);
+    }
+
+    #[test]
+    fn test_auto_focus_off_ignores_requires_focus_mode() {
+        // When auto_focus is disabled, requires_focus_mode should have no effect
+        // All panes are modal
+        let (mut layout, chat_id, tree_id) = create_mixed_focus_layout();
+        // auto_focus defaults to false
+
+        // First pane (chat) selected
+        let selected = layout.mode().selected_pane();
+        assert_eq!(selected.unwrap(), chat_id);
+
+        // Press 'x' key - should NOT be routed (normal Layout Mode behavior)
+        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        // Should NOT be handled (Layout Mode doesn't handle 'x')
+        assert_eq!(result, EventResult::NotHandled);
+
+        // Move to second pane (tree)
+        layout.select_next_pane();
+        assert_eq!(layout.mode().selected_pane().unwrap(), tree_id);
+
+        // Press 'x' key - should STILL not be routed (auto_focus is off)
+        let result = layout.handle_key_event(key);
+        assert_eq!(result, EventResult::NotHandled);
+    }
+
+    #[test]
+    fn test_hybrid_workflow() {
+        // Simulate a realistic hybrid workflow:
+        // 1. Navigate to tree pane (auto-passthrough)
+        // 2. Press keys that are handled by tree
+        // 3. Navigate to chat pane (requires explicit focus)
+        // 4. Press Enter to focus
+        // 5. Type in chat
+        // 6. Press Ctrl-A to exit
+        let (mut layout, chat_id, tree_id) = create_mixed_focus_layout();
+        layout = layout.with_auto_focus(true);
+
+        // Step 1: Navigate to tree pane
+        layout.select_next_pane();
+        assert_eq!(layout.mode().selected_pane().unwrap(), tree_id);
+
+        // Step 2: Press 'j' key - handled by tree via auto-passthrough
+        let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+        assert_eq!(result, EventResult::Consumed);
+        assert!(layout.mode().is_layout()); // Still in Layout Mode
+
+        // Step 3: Navigate back to chat pane
+        layout.select_prev_pane();
+        assert_eq!(layout.mode().selected_pane().unwrap(), chat_id);
+
+        // Step 4: Press Enter to focus (required because chat needs explicit focus)
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+        assert_eq!(result, EventResult::Consumed);
+        assert!(layout.mode().is_focus()); // Now in Focus Mode
+
+        // Step 5: Type in chat
+        let key = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+        assert_eq!(result, EventResult::Consumed);
+        assert!(layout.mode().is_focus()); // Still in Focus Mode
+
+        // Step 6: Press Ctrl-A to exit
+        let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL);
+        let result = layout.handle_key_event(key);
+        assert_eq!(result, EventResult::Consumed);
+        assert!(layout.mode().is_layout()); // Back to Layout Mode
+    }
+
+    #[test]
+    fn test_requires_focus_q_does_quit_in_layout_mode() {
+        // Verify that 'q' quits when selected pane requires focus mode
+        // It falls through to Layout Mode which handles 'q' as quit
+        let (mut layout, chat_id, _tree_id) = create_mixed_focus_layout();
+        layout = layout.with_auto_focus(true);
+
+        // First pane (chat) requires focus mode
+        assert_eq!(layout.mode().selected_pane().unwrap(), chat_id);
+
+        // Press 'q' - should quit (falls through to Layout Mode)
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        // 'q' should quit in Layout Mode
+        assert_eq!(result, EventResult::Quit);
+    }
+
+    #[test]
+    fn test_auto_passthrough_q_quits() {
+        // Verify that 'q' still quits even in auto-passthrough mode
+        // because it's checked as a global key first
+        let (mut layout, _chat_id, tree_id) = create_mixed_focus_layout();
+        layout = layout.with_auto_focus(true);
+
+        // Navigate to tree pane (doesn't require focus)
+        layout.select_next_pane();
+        assert_eq!(layout.mode().selected_pane().unwrap(), tree_id);
+
+        // Press 'q' - should quit (global key in auto_focus mode)
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Quit);
     }
 }

@@ -70,6 +70,38 @@ pub trait PaneContent {
         // Default: no-op
     }
 
+    /// Whether this pane requires explicit focus mode (Enter to focus, Ctrl+A to exit).
+    ///
+    /// When `auto_focus` is enabled on `MasterLayout`:
+    /// - Panes returning `false` (default): receive input immediately when selected
+    /// - Panes returning `true`: require Enter to focus, Ctrl+A to exit (modal behavior)
+    ///
+    /// When `auto_focus` is disabled, this method has no effect (all panes are modal).
+    ///
+    /// Use cases for returning `true`:
+    /// - Chat/message input panes that need Enter for sending messages
+    /// - Terminal emulators that capture all keyboard input
+    /// - Text editors that use navigation keys for cursor movement
+    fn requires_focus_mode(&self) -> bool {
+        false
+    }
+
+    /// Icon displayed when this pane is focused.
+    ///
+    /// Override to customize the focus indicator in the title bar.
+    /// Default: "█"
+    fn focus_icon(&self) -> &str {
+        "█"
+    }
+
+    /// Icon displayed when this pane is selected (but not focused).
+    ///
+    /// Override to customize the selection indicator in the title bar.
+    /// Default: "●"
+    fn selected_icon(&self) -> &str {
+        "●"
+    }
+
     /// Get custom border style for this pane
     /// Default implementation uses standard focus/selection colors
     fn border_style(&self, is_selected: bool, is_focused: bool) -> Style {
@@ -90,12 +122,24 @@ pub trait PaneContent {
     }
 
     /// Get title with focus/selection indicator
+    ///
+    /// Shows different indicators based on state:
+    /// - Focused: `{focus_icon} Title (Focused)`
+    /// - Selected + requires_focus_mode: `{selected_icon} Title (Press Enter)`
+    /// - Selected (normal): `{selected_icon} Title (Selected)`
+    /// - Inactive: `Title`
+    ///
+    /// Override `focus_icon()` and `selected_icon()` to customize the icons.
     fn title_with_indicator(&self, is_selected: bool, is_focused: bool) -> String {
         let title = self.title();
         if is_focused {
-            format!("█ {} (Focused)", title)
+            format!("{} {} (Focused)", self.focus_icon(), title)
         } else if is_selected {
-            format!("● {} (Selected)", title)
+            if self.requires_focus_mode() {
+                format!("{} {} (Press Enter)", self.selected_icon(), title)
+            } else {
+                format!("{} {} (Selected)", self.selected_icon(), title)
+            }
         } else {
             title
         }
@@ -186,6 +230,15 @@ impl Pane {
     /// Check if pane is focusable
     pub fn is_focusable(&self) -> bool {
         self.content.is_focusable()
+    }
+
+    /// Check if pane requires explicit focus mode when auto_focus is enabled
+    ///
+    /// When `auto_focus` is enabled on `MasterLayout`:
+    /// - Returns `false`: pane receives input immediately when selected
+    /// - Returns `true`: pane requires Enter to focus, Ctrl+A to exit
+    pub fn requires_focus_mode(&self) -> bool {
+        self.content.requires_focus_mode()
     }
 
     /// Handle keyboard input
@@ -361,6 +414,7 @@ mod tests {
         title: String,
         focusable: bool,
         focused: bool,
+        requires_focus: bool,
         last_key: Option<KeyEvent>,
         last_mouse: Option<MouseEvent>,
     }
@@ -371,6 +425,7 @@ mod tests {
                 title: title.to_string(),
                 focusable: true,
                 focused: false,
+                requires_focus: false,
                 last_key: None,
                 last_mouse: None,
             }
@@ -381,6 +436,18 @@ mod tests {
                 title: title.to_string(),
                 focusable: false,
                 focused: false,
+                requires_focus: false,
+                last_key: None,
+                last_mouse: None,
+            }
+        }
+
+        fn with_requires_focus(title: &str) -> Self {
+            Self {
+                title: title.to_string(),
+                focusable: true,
+                focused: false,
+                requires_focus: true,
                 last_key: None,
                 last_mouse: None,
             }
@@ -418,6 +485,10 @@ mod tests {
 
         fn set_focused(&mut self, focused: bool) {
             self.focused = focused;
+        }
+
+        fn requires_focus_mode(&self) -> bool {
+            self.requires_focus
         }
     }
 
@@ -762,5 +833,69 @@ mod tests {
         // Set unfocused
         PaneContent::set_focused(&mut mock, false);
         assert!(!mock.focused);
+    }
+
+    // === REQUIRES_FOCUS_MODE TESTS ===
+
+    #[test]
+    fn test_requires_focus_mode_default_is_false() {
+        let content = MockPaneContent::new("Test");
+        assert!(!content.requires_focus_mode());
+    }
+
+    #[test]
+    fn test_requires_focus_mode_can_return_true() {
+        let content = MockPaneContent::with_requires_focus("Chat");
+        assert!(content.requires_focus_mode());
+    }
+
+    #[test]
+    fn test_pane_requires_focus_mode_wrapper() {
+        let pane_id = PaneId::new("test");
+        let content = Box::new(MockPaneContent::new("Test"));
+        let pane = Pane::new(pane_id, content);
+
+        // Default content returns false
+        assert!(!pane.requires_focus_mode());
+    }
+
+    #[test]
+    fn test_pane_requires_focus_mode_wrapper_true() {
+        let pane_id = PaneId::new("chat");
+        let content = Box::new(MockPaneContent::with_requires_focus("Chat"));
+        let pane = Pane::new(pane_id, content);
+
+        // Content with requires_focus returns true
+        assert!(pane.requires_focus_mode());
+    }
+
+    #[test]
+    fn test_title_with_indicator_selected_requires_focus() {
+        let content = MockPaneContent::with_requires_focus("Chat");
+        let title = content.title_with_indicator(true, false);
+        assert_eq!(title, "● Chat (Press Enter)");
+    }
+
+    #[test]
+    fn test_title_with_indicator_selected_no_requires_focus() {
+        let content = MockPaneContent::new("TreeList");
+        let title = content.title_with_indicator(true, false);
+        assert_eq!(title, "● TreeList (Selected)");
+    }
+
+    #[test]
+    fn test_title_with_indicator_focused_requires_focus() {
+        // When focused, the indicator should be the same regardless of requires_focus_mode
+        let content = MockPaneContent::with_requires_focus("Chat");
+        let title = content.title_with_indicator(false, true);
+        assert_eq!(title, "█ Chat (Focused)");
+    }
+
+    #[test]
+    fn test_title_with_indicator_inactive_requires_focus() {
+        // When inactive, the indicator should be the same regardless of requires_focus_mode
+        let content = MockPaneContent::with_requires_focus("Chat");
+        let title = content.title_with_indicator(false, false);
+        assert_eq!(title, "Chat");
     }
 }
