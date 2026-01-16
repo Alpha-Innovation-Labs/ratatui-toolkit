@@ -30,7 +30,7 @@ pub mod methods;
 pub mod render_title_with_buttons;
 pub mod traits;
 
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::Style;
 
 /// A clickable button widget for the UI
 #[derive(Debug, Clone)]

@@ -132,10 +132,12 @@ pub use pane::Pane;
 
 // Feature-gated re-exports
 #[cfg(feature = "dialog")]
-pub use dialog::{Dialog, DialogType, DialogWidget};
+pub use dialog::widget::DialogWidget;
+#[cfg(feature = "dialog")]
+pub use dialog::{Dialog, DialogType};
 
 #[cfg(feature = "toast")]
-pub use toast::methods::render_toasts;
+pub use toast::methods::render_toasts::render_toasts;
 #[cfg(feature = "toast")]
 pub use toast::{Toast, ToastLevel, ToastManager};
 
@@ -162,7 +164,7 @@ pub use statusline_stacked::{
 pub use hotkey_footer::{HotkeyFooter, HotkeyFooterBuilder, HotkeyItem};
 
 #[cfg(feature = "hotkey")]
-pub use hotkey_modal::{render_hotkey_modal, Hotkey, HotkeyModalConfig, HotkeySection};
+pub use hotkey_modal::{functions::render_hotkey_modal, Hotkey, HotkeyModalConfig, HotkeySection};
 
 #[cfg(feature = "markdown")]
 pub use markdown_renderer::{
@@ -194,7 +196,8 @@ pub use master_layout::{
 /// ```
 pub mod prelude {
     // Core components
-    pub use crate::button::{render_title_with_buttons, Button};
+    pub use crate::button::render_title_with_buttons;
+    pub use crate::button::Button;
     pub use crate::clickable_scrollbar::{
         ClickableScrollbar, ClickableScrollbarState, ScrollbarEvent,
     };
@@ -202,10 +205,12 @@ pub mod prelude {
 
     // Feature-gated components
     #[cfg(feature = "dialog")]
-    pub use crate::dialog::{Dialog, DialogType, DialogWidget};
+    pub use crate::dialog::widget::DialogWidget;
+    #[cfg(feature = "dialog")]
+    pub use crate::dialog::{Dialog, DialogType};
 
     #[cfg(feature = "toast")]
-    pub use crate::toast::methods::render_toasts;
+    pub use crate::toast::methods::render_toasts::render_toasts;
     #[cfg(feature = "toast")]
     pub use crate::toast::{Toast, ToastLevel, ToastManager};
 
@@ -233,7 +238,13 @@ pub mod prelude {
     pub use crate::hotkey_footer::{HotkeyFooter, HotkeyFooterBuilder, HotkeyItem};
 
     #[cfg(feature = "hotkey")]
-    pub use crate::hotkey_modal::{render_hotkey_modal, Hotkey, HotkeyModalConfig, HotkeySection};
+    pub use crate::hotkey_modal::functions::render_hotkey_modal;
+    #[cfg(feature = "hotkey")]
+    pub use crate::hotkey_modal::Hotkey;
+    #[cfg(feature = "hotkey")]
+    pub use crate::hotkey_modal::HotkeyModalConfig;
+    #[cfg(feature = "hotkey")]
+    pub use crate::hotkey_modal::HotkeySection;
 
     #[cfg(feature = "markdown")]
     pub use crate::markdown_renderer::{
