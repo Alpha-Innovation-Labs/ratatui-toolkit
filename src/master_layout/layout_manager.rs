@@ -3,7 +3,7 @@
 use crate::master_layout::MasterLayoutKeyBindings;
 use super::{InteractionMode, PaneId, Tab};
 use crate::{MenuBar, MenuItem};
-use crossterm::event::{Event, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 /// Result of event handling
@@ -37,17 +37,31 @@ pub enum EventResult {
 /// - **Layout Mode**: Navigate panes with hjkl, Tab/Shift+Tab, Enter to focus
 /// - **Focus Mode**: All input goes to focused pane, Ctrl-A to exit
 ///
+/// # Auto-Focus Mode
+///
+/// When `auto_focus` is enabled, the selected pane immediately receives input:
+/// - No Enter required to focus
+/// - No Ctrl-A to exit
+/// - Tab/Shift+Tab switch panes and route input to the new pane
+/// - Global keys (q, 1-9) still work for app control
+///
 /// # Key Bindings
 ///
 /// **Global (always work)**:
 /// - Ctrl+Q: Quit
 /// - 1-9: Switch tabs
 ///
-/// **Layout Mode**:
+/// **Layout Mode** (auto_focus: false):
 /// - h/j/k/l: Directional navigation
 /// - Tab: Next pane
 /// - Shift+Tab: Previous pane
 /// - Enter: Focus selected pane
+///
+/// **Layout Mode** (auto_focus: true):
+/// - h/j/k/l: Route to selected pane
+/// - Tab: Next pane + route input
+/// - Shift+Tab: Previous pane + route input
+/// - Enter: Route to selected pane
 ///
 /// **Focus Mode**:
 /// - Ctrl-A: Exit to Layout Mode
@@ -62,6 +76,7 @@ pub struct MasterLayout {
     global_area: Rect,
     nav_bar_offset: u16,
     keybindings: MasterLayoutKeyBindings,
+    auto_focus: bool,
 }
 
 impl MasterLayout {
@@ -75,6 +90,7 @@ impl MasterLayout {
             global_area: Rect::default(),
             nav_bar_offset: 0,
             keybindings: MasterLayoutKeyBindings::default(),
+            auto_focus: false,
         }
     }
 
@@ -104,6 +120,34 @@ impl MasterLayout {
     /// Set the keybindings
     pub fn set_keybindings(&mut self, keybindings: MasterLayoutKeyBindings) {
         self.keybindings = keybindings;
+    }
+
+    /// Enable auto-focus mode (selected pane receives input immediately)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ratatui_toolkit::master_layout::MasterLayout;
+    ///
+    /// // Default: modal behavior (Enter to focus, Ctrl-A to exit)
+    /// let layout = MasterLayout::new();
+    ///
+    /// // Auto-focus: selected pane receives input immediately
+    /// let layout = MasterLayout::new().with_auto_focus(true);
+    /// ```
+    pub fn with_auto_focus(mut self, enabled: bool) -> Self {
+        self.auto_focus = enabled;
+        self
+    }
+
+    /// Get the auto-focus setting
+    pub fn auto_focus(&self) -> bool {
+        self.auto_focus
+    }
+
+    /// Set the auto-focus setting
+    pub fn set_auto_focus(&mut self, enabled: bool) {
+        self.auto_focus = enabled;
     }
 
     /// Set the navigation bar left offset (to make room for other components like IconNavBar)
@@ -316,6 +360,13 @@ impl MasterLayout {
         // Mode-specific handling
         match self.mode.clone() {
             InteractionMode::Layout { selected_pane } => {
+                // Auto-focus mode: route keys directly to selected pane
+                if self.auto_focus {
+                    if let Some(pane_id) = selected_pane {
+                        return self.handle_auto_focus_layout_key(key, pane_id);
+                    }
+                }
+
                 // In Layout Mode: Check quit keybinding
                 if self.keybindings.is_quit(&key) {
                     return EventResult::Quit;
@@ -425,6 +476,87 @@ impl MasterLayout {
             return EventResult::Consumed;
         }
 
+        EventResult::NotHandled
+    }
+
+    /// Handle keyboard events in Layout Mode with auto-focus enabled
+    fn handle_auto_focus_layout_key(&mut self, key: KeyEvent, pane_id: PaneId) -> EventResult {
+        // Check global keys first (quit and tab switching)
+        if self.keybindings.is_quit(&key) {
+            return EventResult::Quit;
+        }
+
+        if let Some(tab_index) = self.keybindings.get_tab_switch_index(&key) {
+            if tab_index < self.tab_count() {
+                self.set_active_tab(tab_index);
+                return EventResult::Consumed;
+            }
+            return EventResult::NotHandled;
+        }
+
+        // Handle tab navigation: switch pane AND route to new pane
+        if key.code == KeyCode::Tab && key.modifiers.is_empty() {
+            self.select_next_pane();
+            if let Some(new_pane) = self.mode.selected_pane() {
+                return self.route_key_to_pane(key, new_pane);
+            }
+            return EventResult::NotHandled;
+        }
+
+        if key.code == KeyCode::BackTab {
+            self.select_prev_pane();
+            if let Some(new_pane) = self.mode.selected_pane() {
+                return self.route_key_to_pane(key, new_pane);
+            }
+            return EventResult::NotHandled;
+        }
+
+        // Handle navigation keys that both navigate AND route to pane
+        if self.keybindings.is_navigate_left(&key) {
+            self.select_left();
+            if let Some(new_pane) = self.mode.selected_pane() {
+                return self.route_key_to_pane(key, new_pane);
+            }
+            return EventResult::NotHandled;
+        }
+
+        if self.keybindings.is_navigate_right(&key) {
+            self.select_right();
+            if let Some(new_pane) = self.mode.selected_pane() {
+                return self.route_key_to_pane(key, new_pane);
+            }
+            return EventResult::NotHandled;
+        }
+
+        if self.keybindings.is_navigate_up(&key) {
+            self.select_up();
+            if let Some(new_pane) = self.mode.selected_pane() {
+                return self.route_key_to_pane(key, new_pane);
+            }
+            return EventResult::NotHandled;
+        }
+
+        if self.keybindings.is_navigate_down(&key) {
+            self.select_down();
+            if let Some(new_pane) = self.mode.selected_pane() {
+                return self.route_key_to_pane(key, new_pane);
+            }
+            return EventResult::NotHandled;
+        }
+
+        // All other keys go directly to the selected pane
+        self.route_key_to_pane(key, pane_id)
+    }
+
+    /// Route a key event to a specific pane
+    fn route_key_to_pane(&mut self, key: KeyEvent, pane_id: PaneId) -> EventResult {
+        if let Some(tab) = self.active_tab_mut() {
+            if let Some(pane) = tab.pane_container_mut().get_pane_mut(pane_id) {
+                if pane.handle_key(key) {
+                    return EventResult::Consumed;
+                }
+            }
+        }
         EventResult::NotHandled
     }
 
@@ -1777,5 +1909,249 @@ mod tests {
             Some(pane1_id),
             "Should still be focused on first pane (navigation not allowed in Focus Mode)"
         );
+    }
+
+    // === AUTO-FOCUS MODE TESTS ===
+
+    #[test]
+    fn test_with_auto_focus_enables_auto_focus() {
+        let layout = MasterLayout::new().with_auto_focus(true);
+        assert!(layout.auto_focus());
+    }
+
+    #[test]
+    fn test_default_auto_focus_is_disabled() {
+        let layout = MasterLayout::new();
+        assert!(!layout.auto_focus());
+    }
+
+    #[test]
+    fn test_set_auto_focus() {
+        let mut layout = MasterLayout::new();
+        assert!(!layout.auto_focus());
+
+        layout.set_auto_focus(true);
+        assert!(layout.auto_focus());
+
+        layout.set_auto_focus(false);
+        assert!(!layout.auto_focus());
+    }
+
+    #[test]
+    fn test_auto_focus_routes_input_immediately() {
+        let mut layout = create_test_layout().with_auto_focus(true);
+
+        // Should have a pane selected
+        let selected = layout.mode().selected_pane();
+        assert!(selected.is_some());
+
+        // Press 'j' key - should be routed to pane immediately
+        let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+
+        // Should still be in layout mode (not focus mode)
+        assert!(layout.mode().is_layout());
+    }
+
+    #[test]
+    fn test_auto_focus_tab_switches_and_routes() {
+        let mut layout = create_test_layout().with_auto_focus(true);
+
+        // Get initial selected pane
+        let first_selected = layout.mode().selected_pane();
+        assert!(first_selected.is_some());
+
+        // Press Tab - should switch to next pane and route the Tab key
+        let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+
+        // Selection should have changed
+        let new_selected = layout.mode().selected_pane();
+        assert_ne!(first_selected, new_selected);
+    }
+
+    #[test]
+    fn test_auto_focus_shift_tab_switches_and_routes() {
+        let mut layout = create_test_layout().with_auto_focus(true);
+
+        // Get initial selected pane
+        let first_selected = layout.mode().selected_pane();
+        assert!(first_selected.is_some());
+
+        // Press Shift+Tab - should switch to previous pane and route the key
+        let key = KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT);
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+
+        // Selection should have changed
+        let new_selected = layout.mode().selected_pane();
+        assert_ne!(first_selected, new_selected);
+    }
+
+    #[test]
+    fn test_auto_focus_no_enter_required() {
+        let mut layout = create_test_layout().with_auto_focus(true);
+
+        // Press 'x' key - should be routed to selected pane immediately
+        // No Enter required
+        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+
+        // Should still be in layout mode
+        assert!(layout.mode().is_layout());
+    }
+
+    #[test]
+    fn test_auto_focus_no_ctrl_a_required() {
+        let mut layout = create_test_layout().with_auto_focus(true);
+
+        // Press Ctrl-A - should be routed to selected pane
+        // No Ctrl-A required for anything else (unlike focus mode exit)
+        let key = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL);
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+
+        // Should still be in layout mode
+        assert!(layout.mode().is_layout());
+    }
+
+    #[test]
+    fn test_auto_focus_q_quits() {
+        let mut layout = create_test_layout().with_auto_focus(true);
+
+        // Press 'q' - should still quit (global key)
+        let key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Quit);
+    }
+
+    #[test]
+    fn test_auto_focus_digit_keys_switch_tabs() {
+        let mut layout = MasterLayout::new().with_auto_focus(true);
+
+        // Create two tabs
+        let mut tab1 = Tab::new("Tab 1");
+        tab1.add_pane(Pane::new(
+            PaneId::new("p1"),
+            Box::new(MockContent::new("P1")),
+        ));
+        layout.add_tab(tab1);
+
+        let mut tab2 = Tab::new("Tab 2");
+        tab2.add_pane(Pane::new(
+            PaneId::new("p2"),
+            Box::new(MockContent::new("P2")),
+        ));
+        layout.add_tab(tab2);
+
+        // Start on first tab
+        assert_eq!(layout.active_tab_index(), 0);
+
+        // Press '2' - should switch to second tab (global key still works)
+        let key = KeyEvent::new(KeyCode::Char('2'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+        assert_eq!(layout.active_tab_index(), 1);
+    }
+
+    #[test]
+    fn test_default_behavior_unchanged() {
+        // Regression test: ensure default behavior (auto_focus: false) is unchanged
+        let mut layout = create_test_layout();
+
+        // Verify auto_focus is disabled
+        assert!(!layout.auto_focus());
+
+        // Should be in layout mode
+        assert!(layout.mode().is_layout());
+
+        // Press 'j' - should NOT route to pane in layout mode
+        let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        // Should be consumed (navigation)
+        assert_eq!(result, EventResult::Consumed);
+
+        // Should still be in layout mode
+        assert!(layout.mode().is_layout());
+
+        // Press Enter - should enter focus mode
+        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+        assert!(layout.mode().is_focus());
+    }
+
+    #[test]
+    fn test_auto_focus_hjkl_routes_to_pane() {
+        let mut layout = create_test_layout().with_auto_focus(true);
+
+        // Get initial selected pane
+        let _first_selected = layout.mode().selected_pane();
+
+        // Press 'j' - should route to pane AND navigate
+        let key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        assert_eq!(result, EventResult::Consumed);
+
+        // In auto-focus mode, hjkl still navigates panes
+        let new_selected = layout.mode().selected_pane();
+        assert!(new_selected.is_some());
+    }
+
+    #[test]
+    fn test_auto_focus_with_no_selection() {
+        let mut layout = MasterLayout::new().with_auto_focus(true);
+        let tab = Tab::new("Empty Tab");
+        layout.add_tab(tab);
+
+        // No panes, so no selection
+        assert!(layout.mode().selected_pane().is_none());
+
+        // Press 'x' key - should not panic
+        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::empty());
+        let result = layout.handle_key_event(key);
+
+        // Should return NotHandled (no pane to route to)
+        assert_eq!(result, EventResult::NotHandled);
+    }
+
+    #[test]
+    fn test_auto_focus_mouse_behavior() {
+        // Verify mouse behavior still works in auto-focus mode
+        let mut layout = create_test_layout().with_auto_focus(true);
+
+        // Render to calculate pane areas
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                layout.render(frame);
+            })
+            .unwrap();
+
+        // Click on pane area (below nav bar)
+        let mouse = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 10,
+            row: 5,
+            modifiers: KeyModifiers::empty(),
+        };
+
+        // Should not panic
+        let _result = layout.handle_mouse_event(mouse);
+        // Result could be Consumed or NotHandled depending on what was clicked
     }
 }
