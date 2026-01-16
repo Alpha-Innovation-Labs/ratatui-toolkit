@@ -486,7 +486,10 @@ impl TermTui {
     /// Handle mouse down (start selection)
     ///
     /// Note: Consider using `handle_mouse` instead for comprehensive mouse handling.
-    #[deprecated(since = "0.2.0", note = "Use handle_mouse instead for comprehensive mouse handling")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use handle_mouse instead for comprehensive mouse handling"
+    )]
     pub fn handle_mouse_down(&mut self, x: u16, y: u16) {
         let content_x = x.saturating_sub(1) as i32;
         let content_y = y.saturating_sub(1) as i32;
@@ -501,7 +504,10 @@ impl TermTui {
     /// Handle mouse drag (update selection)
     ///
     /// Note: Consider using `handle_mouse` instead for comprehensive mouse handling.
-    #[deprecated(since = "0.2.0", note = "Use handle_mouse instead for comprehensive mouse handling")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use handle_mouse instead for comprehensive mouse handling"
+    )]
     pub fn handle_mouse_drag(&mut self, x: u16, y: u16) {
         if self.copy_mode.is_active() {
             let content_x = x.saturating_sub(1) as i32;
@@ -521,7 +527,10 @@ impl TermTui {
     /// Handle mouse up
     ///
     /// Note: Consider using `handle_mouse` instead for comprehensive mouse handling.
-    #[deprecated(since = "0.2.0", note = "Use handle_mouse instead for comprehensive mouse handling")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use handle_mouse instead for comprehensive mouse handling"
+    )]
     pub fn handle_mouse_up(&mut self) {
         // Keep selection active
     }
@@ -640,7 +649,12 @@ impl TermTui {
             let exit_key = TermTuiKeyBindings::key_to_display_string(&kb.copy_exit);
 
             Line::from(vec![
-                Span::styled(" COPY ", Style::default().fg(RatatuiColor::Black).bg(RatatuiColor::Yellow)),
+                Span::styled(
+                    " COPY ",
+                    Style::default()
+                        .fg(RatatuiColor::Black)
+                        .bg(RatatuiColor::Yellow),
+                ),
                 Span::raw(" "),
                 Span::styled(move_keys, Style::default().fg(RatatuiColor::Cyan)),
                 Span::raw(" move "),
@@ -785,7 +799,10 @@ mod tests {
         assert!(TermTuiKeyBindings::key_matches(&key, &kb.enter_copy_mode));
 
         let wrong_key = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL);
-        assert!(!TermTuiKeyBindings::key_matches(&wrong_key, &kb.enter_copy_mode));
+        assert!(!TermTuiKeyBindings::key_matches(
+            &wrong_key,
+            &kb.enter_copy_mode
+        ));
     }
 
     #[test]

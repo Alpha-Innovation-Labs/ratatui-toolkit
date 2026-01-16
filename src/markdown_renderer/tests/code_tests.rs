@@ -7,15 +7,15 @@ fn test_code_block_with_border() {
     let markdown = "```rust\nfn main() {}\n```";
     let text = render_markdown(markdown, Some(200));
 
-    // Should have border lines
+    // Should have border lines (using box-drawing characters)
     let has_top_border = text
         .lines
         .iter()
-        .any(|line| line.spans.iter().any(|span| span.content.contains("╭")));
+        .any(|line| line.spans.iter().any(|span| span.content.contains("┌")));
     let has_bottom_border = text
         .lines
         .iter()
-        .any(|line| line.spans.iter().any(|span| span.content.contains("╰")));
+        .any(|line| line.spans.iter().any(|span| span.content.contains("└")));
 
     assert!(has_top_border, "Code block should have top border");
     assert!(has_bottom_border, "Code block should have bottom border");
@@ -28,7 +28,7 @@ fn test_inline_code_styling() {
 
     // Find the inline code span
     let has_inline_code = text.lines.iter().flat_map(|line| &line.spans).any(|span| {
-        span.content.contains("inline code") && span.style.bg == Some(Color::Rgb(68, 71, 90))
+        span.content.contains("inline code") && span.style.bg == Some(Color::Rgb(60, 60, 60))
     });
 
     assert!(has_inline_code, "Inline code should have background color");

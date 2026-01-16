@@ -16,15 +16,16 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Tabs},
+    widgets::{Block, BorderType, Borders, Paragraph, Tabs, Widget},
     Terminal,
 };
 use ratatui_toolkit::{
-    render_hotkey_modal, render_markdown, render_toasts, ClickableScrollbar,
+    handle_mouse_event, render_hotkey_modal, render_toasts, ClickableScrollbar,
     ClickableScrollbarState, Dialog, DialogType, Hotkey, HotkeyFooter, HotkeyItem,
-    HotkeyModalConfig, HotkeySection, MenuBar, MenuItem, ResizableSplit, ScrollbarEvent, StatusBar,
-    StatusItem, StatusLineStacked, TermTui, Toast, ToastLevel, ToastManager, TreeNavigator,
-    TreeNode, TreeView, TreeViewState, SLANT_BL_TR, SLANT_TL_BR,
+    HotkeyModalConfig, HotkeySection, MarkdownScrollManager, MarkdownWidget, MenuBar, MenuItem,
+    ResizableSplit, ScrollbarEvent, StatusBar, StatusItem, StatusLineStacked, TermTui, Toast,
+    ToastLevel, ToastManager, TreeNavigator, TreeNode, TreeView, TreeViewState, SLANT_BL_TR,
+    SLANT_TL_BR,
 };
 use std::io;
 use std::time::Instant;
@@ -96,7 +97,8 @@ struct App {
     show_hotkey_modal: bool,
 
     // Markdown demo
-    markdown_scroll: u16,
+    markdown_scroll: MarkdownScrollManager,
+    markdown_content: String,
 
     // Scrollbar demo
     scrollbar_state: ClickableScrollbarState,
@@ -158,7 +160,8 @@ impl App {
             show_dialog: false,
             dialog_type: DialogType::Info,
             show_hotkey_modal: false,
-            markdown_scroll: 0,
+            markdown_scroll: MarkdownScrollManager::new(),
+            markdown_content: load_sample_markdown(),
             scrollbar_state,
             scroll_content,
             status_mode: DemoMode::Normal,
@@ -215,34 +218,13 @@ impl App {
     }
 }
 
-const SAMPLE_MARKDOWN: &str = r#"# Markdown Rendering
+const SAMPLE_MARKDOWN_FILE: &str = "examples/markdown_demo_full.md";
 
-The **MarkdownRenderer** converts markdown to styled `ratatui::Text`.
-
-## Features
-
-- **Bold** and *italic* text
-- `Inline code` snippets
-- Code blocks with syntax hints
-
-```rust
-fn main() {
-    println!("Hello, ratatui!");
+fn load_sample_markdown() -> String {
+    std::fs::read_to_string(SAMPLE_MARKDOWN_FILE).unwrap_or_else(|_| {
+        "# Markdown Rendering\n\nError: Could not load markdown demo file.".to_string()
+    })
 }
-```
-
-## Lists
-
-- First item
-- Second item
-  - Nested item
-
-> Block quotes are also supported!
-
----
-
-Press **j/k** to scroll, **Tab** to switch tabs.
-"#;
 
 fn main() -> io::Result<()> {
     enable_raw_mode()?;
@@ -478,10 +460,22 @@ fn main() -> io::Result<()> {
                             },
                             DemoTab::Markdown => match key.code {
                                 KeyCode::Char('j') | KeyCode::Down => {
-                                    app.markdown_scroll = app.markdown_scroll.saturating_add(1);
+                                    app.markdown_scroll.scroll_down(1);
                                 }
                                 KeyCode::Char('k') | KeyCode::Up => {
-                                    app.markdown_scroll = app.markdown_scroll.saturating_sub(1);
+                                    app.markdown_scroll.scroll_up(1);
+                                }
+                                KeyCode::PageDown => {
+                                    app.markdown_scroll.scroll_down(10);
+                                }
+                                KeyCode::PageUp => {
+                                    app.markdown_scroll.scroll_up(10);
+                                }
+                                KeyCode::Home => {
+                                    app.markdown_scroll.scroll_to_top();
+                                }
+                                KeyCode::End => {
+                                    app.markdown_scroll.scroll_to_bottom();
                                 }
                                 _ => {}
                             },
@@ -577,6 +571,22 @@ fn main() -> io::Result<()> {
                             }
                             ScrollbarEvent::None => {}
                         }
+                    }
+
+                    // Handle markdown widget interactions
+                    if app.current_tab == DemoTab::Markdown {
+                        let content_area = Rect {
+                            x: area.x + 1,
+                            y: area.y + 4,
+                            width: area.width.saturating_sub(2),
+                            height: area.height.saturating_sub(6),
+                        };
+                        handle_mouse_event(
+                            &mouse,
+                            content_area,
+                            &app.markdown_content,
+                            &mut app.markdown_scroll,
+                        );
                     }
 
                     // Handle terminal mouse events (scroll, selection, drag)
@@ -774,18 +784,17 @@ fn render_dialogs_demo(frame: &mut ratatui::Frame, area: Rect, _app: &mut App) {
 }
 
 fn render_markdown_demo(frame: &mut ratatui::Frame, area: Rect, app: &mut App) {
-    let text = render_markdown(SAMPLE_MARKDOWN, Some(area.width as usize - 4));
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .title(" Markdown Renderer ");
 
-    let paragraph = Paragraph::new(text)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .title(" Markdown Renderer "),
-        )
-        .scroll((app.markdown_scroll, 0));
+    let widget = MarkdownWidget::new(&app.markdown_content, &mut app.markdown_scroll);
 
-    frame.render_widget(paragraph, area);
+    let inner_area = block.inner(area);
+    block.render(area, frame.buffer_mut());
+
+    frame.render_widget(widget, inner_area);
 }
 
 fn render_scrollbar_demo(frame: &mut ratatui::Frame, area: Rect, app: &mut App) {
@@ -946,13 +955,12 @@ fn render_terminal_demo(frame: &mut ratatui::Frame, area: Rect, app: &mut App) {
         term.render(frame, chunks[0]);
     } else {
         // Fallback if terminal failed to spawn
-        let fallback = Paragraph::new("Terminal failed to spawn")
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded)
-                    .title(" Terminal "),
-            );
+        let fallback = Paragraph::new("Terminal failed to spawn").block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title(" Terminal "),
+        );
         frame.render_widget(fallback, chunks[0]);
     }
 

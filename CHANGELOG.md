@@ -42,8 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Customizable styling with `MarkdownStyle`
 
 - **Terminal Emulation**
-  - `AlacTerm` - Alacritty-based embedded terminal
-  - `VT100Term` - VT100 terminal emulator with infinite scrollback
+  - `TermTui` - Terminal emulator with mprocs-style architecture
   - Copy mode support with text selection
   - OSC 52 clipboard integration
 

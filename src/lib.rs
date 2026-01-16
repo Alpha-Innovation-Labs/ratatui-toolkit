@@ -12,7 +12,7 @@
 //! - **Widgets**: [`TreeView`], [`ClickableScrollbar`], [`FuzzyFinder`] for data display
 //! - **Navigation**: [`MenuBar`], [`HotkeyFooter`], [`StatusBar`] for navigation aids
 //! - **Rendering**: [`render_markdown`] for markdown to ratatui text conversion
-//! - **Terminal**: [`AlacTerm`], [`VT100Term`], [`TermTui`] for embedded terminal emulation
+//! - **Terminal**: [`TermTui`] for embedded terminal emulation
 //!
 //! ## Feature Flags
 //!
@@ -28,7 +28,7 @@
 //! | `menu` | Yes | Menu bar component |
 //! | `statusbar` | Yes | Status bar components |
 //! | `hotkey` | Yes | Hotkey footer and modal |
-//! | `terminal` | No | Terminal emulators (AlacTerm, VT100) |
+//! | `terminal` | No | Terminal emulator (TermTui) |
 //! | `fuzzy` | No | Fuzzy finder component |
 //! | `master-layout` | No | Full application layout framework |
 //! | `file-tree` | No | File system tree with devicons |
@@ -111,18 +111,6 @@ pub mod markdown_renderer;
 
 #[cfg(feature = "terminal")]
 #[cfg_attr(docsrs, doc(cfg(feature = "terminal")))]
-pub mod alac_term;
-
-#[cfg(feature = "terminal")]
-#[cfg_attr(docsrs, doc(cfg(feature = "terminal")))]
-pub mod vt100_term;
-
-#[cfg(feature = "terminal")]
-#[cfg_attr(docsrs, doc(cfg(feature = "terminal")))]
-pub mod ai_chat;
-
-#[cfg(feature = "terminal")]
-#[cfg_attr(docsrs, doc(cfg(feature = "terminal")))]
 pub mod termtui;
 
 #[cfg(feature = "fuzzy")]
@@ -147,7 +135,9 @@ pub use pane::Pane;
 pub use dialog::{Dialog, DialogType, DialogWidget};
 
 #[cfg(feature = "toast")]
-pub use toast::{render_toasts, Toast, ToastLevel, ToastManager};
+pub use toast::methods::render_toasts;
+#[cfg(feature = "toast")]
+pub use toast::{Toast, ToastLevel, ToastManager};
 
 #[cfg(feature = "split")]
 pub use resizable_split::{ResizableSplit, SplitDirection};
@@ -175,16 +165,10 @@ pub use hotkey_footer::{HotkeyFooter, HotkeyFooterBuilder, HotkeyItem};
 pub use hotkey_modal::{render_hotkey_modal, Hotkey, HotkeyModalConfig, HotkeySection};
 
 #[cfg(feature = "markdown")]
-pub use markdown_renderer::{render_markdown, render_markdown_with_style, MarkdownStyle};
-
-#[cfg(feature = "terminal")]
-pub use alac_term::{AlacTerm, AlacTermKeyBindings, KeyBinding};
-
-#[cfg(feature = "terminal")]
-pub use vt100_term::{KeyBinding as VT100KeyBinding, VT100Term, VT100TermKeyBindings};
-
-#[cfg(feature = "terminal")]
-pub use ai_chat::AiChat;
+pub use markdown_renderer::{
+    handle_mouse_event, render_markdown, render_markdown_interactive, render_markdown_with_style,
+    MarkdownScrollManager, MarkdownStyle, MarkdownWidget,
+};
 
 #[cfg(feature = "terminal")]
 pub use termtui::{TermTui, TermTuiKeyBindings};
@@ -221,7 +205,9 @@ pub mod prelude {
     pub use crate::dialog::{Dialog, DialogType, DialogWidget};
 
     #[cfg(feature = "toast")]
-    pub use crate::toast::{render_toasts, Toast, ToastLevel, ToastManager};
+    pub use crate::toast::methods::render_toasts;
+    #[cfg(feature = "toast")]
+    pub use crate::toast::{Toast, ToastLevel, ToastManager};
 
     #[cfg(feature = "split")]
     pub use crate::resizable_split::{ResizableSplit, SplitDirection};
@@ -251,17 +237,9 @@ pub mod prelude {
 
     #[cfg(feature = "markdown")]
     pub use crate::markdown_renderer::{
-        render_markdown, render_markdown_with_style, MarkdownStyle,
+        handle_mouse_event, render_markdown, render_markdown_interactive,
+        render_markdown_with_style, MarkdownScrollManager, MarkdownStyle, MarkdownWidget,
     };
-
-    #[cfg(feature = "terminal")]
-    pub use crate::alac_term::{AlacTerm, AlacTermKeyBindings, KeyBinding};
-
-    #[cfg(feature = "terminal")]
-    pub use crate::vt100_term::{KeyBinding as VT100KeyBinding, VT100Term, VT100TermKeyBindings};
-
-    #[cfg(feature = "terminal")]
-    pub use crate::ai_chat::AiChat;
 
     #[cfg(feature = "terminal")]
     pub use crate::termtui::{TermTui, TermTuiKeyBindings};

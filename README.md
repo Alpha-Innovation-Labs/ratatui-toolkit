@@ -27,8 +27,6 @@ A comprehensive collection of reusable TUI components for [ratatui](https://rata
 | **StatusLineStacked** | Neovim-style powerline status |
 | **MasterLayout** | Application shell with tabs, panes, vim-like navigation |
 | **TermTui** | Terminal emulator with mprocs-style copy mode |
-| **AlacTerm** | Alacritty-based embedded terminal |
-| **VT100Term** | VT100 terminal emulator with scrollback |
 | **FuzzyFinder** | PTY-based fuzzy search popup |
 
 ## Installation
@@ -59,7 +57,7 @@ ratatui-toolkit = { version = "0.1", default-features = false, features = ["tree
 | `menu` | ✅ | Menu bar component |
 | `statusbar` | ✅ | Status bar components |
 | `hotkey` | ✅ | Hotkey footer and modal |
-| `terminal` | ✅ | Terminal emulators (TermTui, AlacTerm, VT100) |
+| `terminal` | ✅ | Terminal emulator (TermTui) |
 | `fuzzy` | ❌ | Fuzzy finder component |
 | `master-layout` | ❌ | Full application layout framework |
 | `file-tree` | ❌ | File system tree with devicons |
@@ -264,8 +262,6 @@ let layout = MasterLayout::new()
 | Component | Config Struct | Builder Method |
 |-----------|--------------|----------------|
 | TermTui | `TermTuiKeyBindings` | `.with_keybindings()` |
-| VT100Term | `VT100TermKeyBindings` | `.with_keybindings()` |
-| AlacTerm | `AlacTermKeyBindings` | `.with_keybindings()` |
 | TreeView | `TreeKeyBindings` | `TreeNavigator::with_keybindings()` |
 | MasterLayout | `MasterLayoutKeyBindings` | `.with_keybindings()` |
 
