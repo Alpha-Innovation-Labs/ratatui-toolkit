@@ -17,3 +17,4 @@ Cargo.lock
 target
 .serena
 web-demo
+node_modules/
