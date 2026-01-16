@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-01-16
+
+### Added
+
+- **Per-Pane Focus Mode** - `requires_focus_mode()` method on `PaneContent` trait
+  - Allows hybrid auto-focus behavior where some panes auto-passthrough and others require explicit focus
+  - Customizable icons via `focus_icon()` and `selected_icon()` methods
+  - Visual indicator shows "Press Enter" for panes requiring explicit focus
+
+### Changed
+
+- **Markdown Renderer** - Complete rewrite with new `styled_line` system
+  - Added syntax highlighting support
+  - Added theme configuration
+  - Added scroll manager and markdown widget
+  - Improved code block rendering with borders
+
+- **Toast Module** - Refactored into `constructors/` and `methods/` for better organization
+
+### Removed
+
+- Removed deprecated `vt100_term` module (replaced by `termtui`)
+- Removed unused `alac_term` module
+- Removed unused `ai_chat` module
+
 ## [0.1.0] - 2026-XX-XX
 
 ### Added
