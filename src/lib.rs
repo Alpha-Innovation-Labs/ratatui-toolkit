@@ -176,9 +176,9 @@ pub use markdown_renderer::{
     copy_selection_to_clipboard, handle_mouse_event, handle_mouse_event_with_double_click,
     handle_mouse_event_with_selection, render_markdown, render_markdown_interactive,
     render_markdown_interactive_with_selection, render_markdown_statusline,
-    render_markdown_with_style, DoubleClickState, GitStats, MarkdownDoubleClickEvent,
-    MarkdownEvent, MarkdownScrollManager, MarkdownStyle, MarkdownWidget, MarkdownWidgetMode,
-    SelectionMouseResult, SelectionState,
+    render_markdown_with_minimap, render_markdown_with_style, DoubleClickState, GitStats,
+    MarkdownDoubleClickEvent, MarkdownEvent, MarkdownRenderOptions, MarkdownScrollManager,
+    MarkdownStyle, MarkdownWidget, MarkdownWidgetMode, SelectionMouseResult, SelectionState,
 };
 
 #[cfg(feature = "terminal")]

@@ -1,56 +1,111 @@
 //! Handle keyboard events for the markdown widget.
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::super::super::markdown_event::MarkdownEvent;
-use super::super::MarkdownWidget;
+use super::super::{MarkdownWidget, MarkdownWidgetMode};
 
 impl<'a> MarkdownWidget<'a> {
-    /// Handle a keyboard event for navigation.
+    /// Handle a keyboard event for navigation and actions.
     ///
-    /// Returns a `MarkdownEvent` indicating what action was taken.
-    ///
-    /// # Handled Keys
-    ///
-    /// - `j` / `Down`: Move highlighted line down (no scroll)
-    /// - `k` / `Up`: Move highlighted line up (no scroll)
+    /// This method handles:
+    /// - `j` / `Down`: Move focused line down (scrolls when near edge)
+    /// - `k` / `Up`: Move focused line up (scrolls when near edge)
     /// - `PageDown`: Scroll down by viewport height
     /// - `PageUp`: Scroll up by viewport height
-    /// - `Home` / `g`: Go to top
+    /// - `Home`: Go to top
     /// - `End` / `G`: Go to bottom
+    /// - `Esc`: Exit selection mode
+    /// - `y`: Copy selection to clipboard (when selection active)
+    /// - `Ctrl+Shift+C`: Copy selection to clipboard
     ///
-    /// Note: Selection-related keys (Esc, y, Ctrl+Shift+C) should be handled
-    /// by the parent application that manages the SelectionState.
+    /// Returns a `MarkdownEvent` indicating what action was taken.
     pub fn handle_key_event(&mut self, key: KeyEvent) -> MarkdownEvent {
+        // Handle selection-related keys first
+        if key.code == KeyCode::Esc && self.selection.is_active() {
+            self.selection.exit();
+            self.mode = MarkdownWidgetMode::Normal;
+            return MarkdownEvent::SelectionEnded;
+        }
+
+        // Copy selection with 'y' (vim-style)
+        if key.code == KeyCode::Char('y') && self.selection.has_selection() {
+            if let Some(text) = self.selection.get_selected_text() {
+                if !text.is_empty() {
+                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                        if clipboard.set_text(&text).is_ok() {
+                            self.selection.exit();
+                            self.mode = MarkdownWidgetMode::Normal;
+                            return MarkdownEvent::Copied { text };
+                        }
+                    }
+                }
+            }
+        }
+
+        // Copy selection with Ctrl+Shift+C
+        if key.code == KeyCode::Char('C')
+            && key.modifiers.contains(KeyModifiers::CONTROL)
+            && key.modifiers.contains(KeyModifiers::SHIFT)
+        {
+            if let Some(text) = self.selection.get_selected_text() {
+                if !text.is_empty() {
+                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                        if clipboard.set_text(&text).is_ok() {
+                            self.selection.exit();
+                            self.mode = MarkdownWidgetMode::Normal;
+                            return MarkdownEvent::Copied { text };
+                        }
+                    }
+                }
+            }
+        }
+
         // Handle navigation keys
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => {
-                // Move current line down (no scroll)
-                if self.scroll.current_line < self.scroll.total_lines {
-                    self.scroll.current_line += 1;
+                // Move focused line down (scrolls when near edge)
+                self.scroll.line_down();
+                MarkdownEvent::FocusedLine {
+                    line: self.scroll.current_line,
                 }
             }
             KeyCode::Char('k') | KeyCode::Up => {
-                // Move current line up (no scroll)
-                if self.scroll.current_line > 1 {
-                    self.scroll.current_line -= 1;
+                // Move focused line up (scrolls when near edge)
+                self.scroll.line_up();
+                MarkdownEvent::FocusedLine {
+                    line: self.scroll.current_line,
                 }
             }
             KeyCode::PageDown => {
+                let old_offset = self.scroll.scroll_offset;
                 self.scroll.scroll_down(self.scroll.viewport_height);
+                MarkdownEvent::Scrolled {
+                    offset: self.scroll.scroll_offset,
+                    direction: (self.scroll.scroll_offset.saturating_sub(old_offset) as i32),
+                }
             }
             KeyCode::PageUp => {
+                let old_offset = self.scroll.scroll_offset;
                 self.scroll.scroll_up(self.scroll.viewport_height);
+                MarkdownEvent::Scrolled {
+                    offset: self.scroll.scroll_offset,
+                    direction: -(old_offset.saturating_sub(self.scroll.scroll_offset) as i32),
+                }
             }
-            KeyCode::Home | KeyCode::Char('g') => {
+            KeyCode::Home => {
                 self.scroll.scroll_to_top();
+                MarkdownEvent::FocusedLine {
+                    line: self.scroll.current_line,
+                }
             }
             KeyCode::End | KeyCode::Char('G') => {
                 self.scroll.scroll_to_bottom();
+                MarkdownEvent::FocusedLine {
+                    line: self.scroll.current_line,
+                }
             }
-            _ => {}
+            _ => MarkdownEvent::None,
         }
-
-        MarkdownEvent::None
     }
 }

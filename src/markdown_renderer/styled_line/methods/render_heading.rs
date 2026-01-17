@@ -20,14 +20,21 @@ pub fn render(
     let bg = heading_bg_color(level);
     let fg = heading_fg_color(level);
 
+    // Level-based indentation: (level - 1) * 2 spaces
+    let indent = "  ".repeat(level.saturating_sub(1) as usize);
+
     // Collapse indicator
-    let collapse_indicator = if collapsed { "▶ " } else { "▼ " };
+    let collapse_indicator = if collapsed { "▶" } else { "▼" };
 
     let mut spans = vec![
+        // Indentation (no background)
+        Span::raw(indent),
+        // Collapse indicator with heading style
         Span::styled(
             collapse_indicator.to_string(),
             Style::default().fg(fg).bg(bg),
         ),
+        // Icon with heading style
         Span::styled(
             icon.to_string(),
             Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),

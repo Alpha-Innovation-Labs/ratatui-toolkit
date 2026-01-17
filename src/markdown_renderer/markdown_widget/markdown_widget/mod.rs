@@ -4,7 +4,11 @@ mod constructors;
 mod methods;
 mod traits;
 
+use crate::markdown_renderer::minimap::MinimapConfig;
 use crate::markdown_renderer::scroll_manager::MarkdownScrollManager;
+
+use super::double_click_state::DoubleClickState;
+use super::selection_state::SelectionState;
 
 /// Mode for the markdown widget statusline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -23,11 +27,13 @@ pub enum MarkdownWidgetMode {
 /// - Clickable headings to collapse/expand sections
 /// - Clickable frontmatter to collapse/expand
 /// - Expandable content blocks ("Show more"/"Show less")
+/// - Text selection and copy support
+/// - Double-click detection
 /// - Statusline showing mode and scroll position
 ///
-/// Note: This widget requires external scroll management. Use the
-/// `render_markdown_scrollable` function along with `MarkdownScrollManager`
-/// for full interactive support.
+/// The widget handles ALL event processing internally and returns `MarkdownEvent`
+/// variants so the parent application can react appropriately.
+///
 /// Git statistics for display in statusline.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GitStats {
@@ -39,12 +45,16 @@ pub struct GitStats {
     pub deletions: usize,
 }
 
-#[derive(Debug)]
+/// A scrollable, interactive markdown widget.
 pub struct MarkdownWidget<'a> {
     /// The markdown content to render.
     pub(crate) content: &'a str,
     /// The scroll manager for handling scroll state.
     pub(crate) scroll: &'a mut MarkdownScrollManager,
+    /// Selection state for text selection/copy.
+    pub(crate) selection: &'a mut SelectionState,
+    /// Double-click state for double-click detection.
+    pub(crate) double_click: &'a mut DoubleClickState,
     /// When true, use stale cache for smoother resize during drag operations.
     pub(crate) is_resizing: bool,
     /// Current mode for the statusline.
@@ -53,4 +63,10 @@ pub struct MarkdownWidget<'a> {
     pub(crate) show_statusline: bool,
     /// Git statistics for the file (optional).
     pub(crate) git_stats: Option<GitStats>,
+    /// Whether to show the minimap.
+    pub(crate) show_minimap: bool,
+    /// Configuration for the minimap.
+    pub(crate) minimap_config: MinimapConfig,
+    /// Cached rendered lines for selection text extraction.
+    pub(crate) rendered_lines: Vec<ratatui::text::Line<'static>>,
 }

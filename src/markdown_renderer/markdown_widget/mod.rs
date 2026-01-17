@@ -21,6 +21,7 @@ mod render_markdown_interactive_with_options;
 mod render_markdown_interactive_with_selection;
 mod render_markdown_scrollable;
 mod render_markdown_statusline;
+mod render_markdown_with_minimap;
 
 // Re-exports
 pub use double_click_state::DoubleClickState;
@@ -39,6 +40,7 @@ pub use render_markdown_interactive_with_options::render_markdown_interactive_wi
 pub use render_markdown_interactive_with_selection::render_markdown_interactive_with_selection;
 pub use render_markdown_scrollable::render_markdown_scrollable;
 pub use render_markdown_statusline::render_markdown_statusline;
+pub use render_markdown_with_minimap::{render_markdown_with_minimap, MarkdownRenderOptions};
 
 #[cfg(test)]
 mod tests;

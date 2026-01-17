@@ -14,6 +14,7 @@ mod file_watcher;
 mod markdown_source;
 mod markdown_style;
 mod markdown_widget;
+pub mod minimap;
 mod render_markdown_to_lines;
 mod scroll_manager;
 mod styled_line;
@@ -29,14 +30,16 @@ pub use markdown_style::MarkdownStyle;
 pub use markdown_widget::{
     copy_selection_to_clipboard, handle_mouse_event, handle_mouse_event_with_double_click,
     handle_mouse_event_with_selection, render_markdown_interactive,
-    render_markdown_interactive_with_selection, render_markdown_statusline, DoubleClickState,
-    GitStats, MarkdownDoubleClickEvent, MarkdownEvent, MarkdownWidget, MarkdownWidgetMode,
-    SelectionMouseResult, SelectionState,
+    render_markdown_interactive_with_selection, render_markdown_statusline,
+    render_markdown_with_minimap, DoubleClickState, GitStats, MarkdownDoubleClickEvent,
+    MarkdownEvent, MarkdownRenderOptions, MarkdownWidget, MarkdownWidgetMode, SelectionMouseResult,
+    SelectionState,
 };
 pub use render_markdown_to_lines::{
     render_markdown_to_lines, render_markdown_to_styled_lines,
     render_markdown_to_styled_lines_with_frontmatter_state,
 };
+pub use minimap::{Minimap, MinimapConfig};
 pub use scroll_manager::{ExpandableState, MarkdownScrollManager};
 pub use styled_line::methods::render::render as render_styled_line;
 pub use styled_line::methods::render::render_with_options as render_styled_line_with_options;

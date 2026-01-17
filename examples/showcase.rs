@@ -20,15 +20,14 @@ use ratatui::{
     Terminal,
 };
 use ratatui_toolkit::{
-    copy_selection_to_clipboard, handle_mouse_event, handle_mouse_event_with_double_click,
-    handle_mouse_event_with_selection, render_hotkey_modal, render_markdown_statusline,
-    render_toasts, render_markdown_interactive_with_selection, ClickableScrollbar,
-    ClickableScrollbarState, ClickableScrollbarStateMouseExt, ClickableScrollbarStateScrollExt,
-    Dialog, DialogType, DialogWidget, DoubleClickState, GitStats, Hotkey, HotkeyFooter,
-    HotkeyItem, HotkeyModalConfig, HotkeySection, MarkdownScrollManager, MarkdownWidgetMode,
-    MenuBar, MenuItem, ResizableSplit, ScrollbarEvent, SelectionMouseResult, SelectionState,
-    StatusBar, StatusItem, StatusLineStacked, TermTui, Toast, ToastLevel, ToastManager,
-    TreeNavigator, TreeNode, TreeView, TreeViewState, SLANT_BL_TR, SLANT_TL_BR,
+    render_hotkey_modal, render_markdown_statusline, render_markdown_with_minimap, render_toasts,
+    ClickableScrollbar, ClickableScrollbarState, ClickableScrollbarStateMouseExt,
+    ClickableScrollbarStateScrollExt, Dialog, DialogType, DialogWidget, DoubleClickState, GitStats,
+    Hotkey, HotkeyFooter, HotkeyItem, HotkeyModalConfig, HotkeySection, MarkdownEvent,
+    MarkdownRenderOptions, MarkdownScrollManager, MarkdownWidget, MarkdownWidgetMode, MenuBar,
+    MenuItem, ResizableSplit, ScrollbarEvent, SelectionState, StatusBar, StatusItem,
+    StatusLineStacked, TermTui, Toast, ToastLevel, ToastManager, TreeNavigator, TreeNode, TreeView,
+    TreeViewState, SLANT_BL_TR, SLANT_TL_BR,
 };
 use ratatui_toolkit::markdown_renderer::{CodeBlockTheme, MarkdownFileWatcher};
 use std::io;
@@ -138,8 +137,8 @@ struct App {
     markdown_selection: SelectionState,
     /// Cached rendered lines for selection
     markdown_rendered_lines: Vec<ratatui::text::Line<'static>>,
-    /// Pending single-click for deferred processing (mouse_event, inner_area, timestamp)
-    markdown_pending_click: Option<(crossterm::event::MouseEvent, Rect, Instant)>,
+    /// Cached inner area for pending click checks
+    markdown_inner_area: Rect,
     /// Show theme picker popup
     show_theme_picker: bool,
     /// Currently selected theme index for the picker
@@ -232,7 +231,7 @@ impl App {
             markdown_double_click: DoubleClickState::new(),
             markdown_selection: SelectionState::new(),
             markdown_rendered_lines: Vec::new(),
-            markdown_pending_click: None,
+            markdown_inner_area: Rect::default(),
             show_theme_picker: false,
             theme_picker_index: 0,
             scrollbar_state,
@@ -497,20 +496,32 @@ fn main() -> io::Result<()> {
         }
 
         // Check for pending markdown single-click timeout (for deferred processing)
-        const DOUBLE_CLICK_THRESHOLD_MS: u64 = 150;
-        if let Some((mouse_event, inner_area, click_time)) = app.markdown_pending_click.take() {
-            if click_time.elapsed().as_millis() as u64 >= DOUBLE_CLICK_THRESHOLD_MS {
-                // Timeout expired - process as single-click (heading collapse)
-                let content = app.markdown_scroll.content().unwrap_or("").to_string();
-                handle_mouse_event(
-                    &mouse_event,
-                    inner_area,
-                    &content,
-                    &mut app.markdown_scroll,
-                );
-            } else {
-                // Not timed out yet - put it back
-                app.markdown_pending_click = Some((mouse_event, inner_area, click_time));
+        if app.current_tab == DemoTab::Markdown {
+            let content = app.markdown_scroll.content().unwrap_or("").to_string();
+            let mut widget = MarkdownWidget::new(
+                &content,
+                &mut app.markdown_scroll,
+                &mut app.markdown_selection,
+                &mut app.markdown_double_click,
+            );
+            widget.set_rendered_lines(app.markdown_rendered_lines.clone());
+
+            match widget.check_pending_click(app.markdown_inner_area) {
+                MarkdownEvent::HeadingToggled { text, .. } => {
+                    let display_text = if text.len() > 30 {
+                        format!("{}...", &text[..30])
+                    } else {
+                        text
+                    };
+                    app.toast_manager.add(Toast::new(
+                        &format!("Toggled: {}", display_text),
+                        ToastLevel::Info,
+                    ));
+                }
+                MarkdownEvent::FocusedLine { .. } => {
+                    // Line focus is handled internally by the widget
+                }
+                _ => {}
             }
         }
 
@@ -644,56 +655,27 @@ fn main() -> io::Result<()> {
                                 _ => {}
                             },
                             DemoTab::Markdown => {
-                                // Handle Escape to exit selection mode
-                                if key.code == KeyCode::Esc && app.markdown_selection.is_active() {
-                                    app.markdown_selection.exit();
-                                }
-                                // Handle Ctrl+Shift+C to copy selection
-                                else if key.code == KeyCode::Char('C')
-                                    && key.modifiers.contains(event::KeyModifiers::CONTROL)
-                                    && key.modifiers.contains(event::KeyModifiers::SHIFT)
-                                {
-                                    if copy_selection_to_clipboard(&app.markdown_selection) {
+                                // Use widget's unified key event handler
+                                let content = app.markdown_scroll.content().unwrap_or("").to_string();
+                                let mut widget = MarkdownWidget::new(
+                                    &content,
+                                    &mut app.markdown_scroll,
+                                    &mut app.markdown_selection,
+                                    &mut app.markdown_double_click,
+                                );
+                                widget.set_rendered_lines(app.markdown_rendered_lines.clone());
+
+                                match widget.handle_key_event(key) {
+                                    MarkdownEvent::Copied { .. } => {
                                         app.toast_manager.add(Toast::new(
                                             "Copied to clipboard!",
                                             ToastLevel::Success,
                                         ));
-                                        app.markdown_selection.exit();
                                     }
-                                }
-                                // Handle 'y' to copy selection (vim-style)
-                                else if key.code == KeyCode::Char('y')
-                                    && app.markdown_selection.has_selection()
-                                {
-                                    if copy_selection_to_clipboard(&app.markdown_selection) {
-                                        app.toast_manager.add(Toast::new(
-                                            "Copied to clipboard!",
-                                            ToastLevel::Success,
-                                        ));
-                                        app.markdown_selection.exit();
+                                    MarkdownEvent::SelectionEnded => {
+                                        // Selection mode exited
                                     }
-                                } else {
-                                    match key.code {
-                                        KeyCode::Char('j') | KeyCode::Down => {
-                                            app.markdown_scroll.scroll_down(1);
-                                        }
-                                        KeyCode::Char('k') | KeyCode::Up => {
-                                            app.markdown_scroll.scroll_up(1);
-                                        }
-                                        KeyCode::PageDown => {
-                                            app.markdown_scroll.scroll_down(10);
-                                        }
-                                        KeyCode::PageUp => {
-                                            app.markdown_scroll.scroll_up(10);
-                                        }
-                                        KeyCode::Home => {
-                                            app.markdown_scroll.scroll_to_top();
-                                        }
-                                        KeyCode::End => {
-                                            app.markdown_scroll.scroll_to_bottom();
-                                        }
-                                        _ => {}
-                                    }
+                                    _ => {}
                                 }
                             }
                             DemoTab::Scrollbar => match key.code {
@@ -814,56 +796,44 @@ fn main() -> io::Result<()> {
                                 height: markdown_area.height.saturating_sub(2),
                             };
 
+                            // Store inner area for pending click checks
+                            app.markdown_inner_area = inner_area;
+
                             // Get content before mutable borrows
                             let content = app.markdown_scroll.content().unwrap_or("").to_string();
 
-                            // Handle selection with mouse drag
-                            let result = handle_mouse_event_with_selection(
-                                &mouse,
-                                inner_area,
+                            // Use widget's unified mouse event handler
+                            let mut widget = MarkdownWidget::new(
                                 &content,
                                 &mut app.markdown_scroll,
                                 &mut app.markdown_selection,
-                                &app.markdown_rendered_lines,
+                                &mut app.markdown_double_click,
                             );
+                            widget.set_rendered_lines(app.markdown_rendered_lines.clone());
 
-                            // Show toast if text was auto-copied
-                            if result.copied {
-                                app.toast_manager.add(Toast::new(
-                                    "Copied to clipboard!",
-                                    ToastLevel::Success,
-                                ));
-                            }
-
-                            // If not a drag/selection event, check for double-click
-                            if !result.handled || mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                                let (_handled, double_click_event) = handle_mouse_event_with_double_click(
-                                    &mouse,
-                                    inner_area,
-                                    &content,
-                                    &mut app.markdown_scroll,
-                                    &mut app.markdown_double_click,
-                                );
-
-                                // Show toast on double-click
-                                if let Some(evt) = double_click_event {
-                                    // Clear pending click - it was part of a double-click
-                                    app.markdown_pending_click = None;
+                            match widget.handle_mouse_event(&mouse, inner_area) {
+                                MarkdownEvent::Copied { .. } => {
+                                    app.toast_manager.add(Toast::new(
+                                        "Copied to clipboard!",
+                                        ToastLevel::Success,
+                                    ));
+                                }
+                                MarkdownEvent::DoubleClick { line_number, line_kind, content } => {
+                                    let display_content = if content.len() > 40 {
+                                        format!("{}...", &content[..40])
+                                    } else {
+                                        content
+                                    };
                                     let msg = format!(
                                         "Line {}: {} - \"{}\"",
-                                        evt.line_number,
-                                        evt.line_kind,
-                                        if evt.content.len() > 40 {
-                                            format!("{}...", &evt.content[..40])
-                                        } else {
-                                            evt.content
-                                        }
+                                        line_number, line_kind, display_content
                                     );
                                     app.toast_manager.add(Toast::new(&msg, ToastLevel::Info));
-                                } else if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                                    // Store pending single-click for deferred processing
-                                    app.markdown_pending_click = Some((mouse, inner_area, Instant::now()));
                                 }
+                                MarkdownEvent::SelectionStarted => {
+                                    // Selection mode started
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -1054,22 +1024,24 @@ fn render_markdown_demo(frame: &mut ratatui::Frame, area: Rect, app: &mut App) {
         (inner_area, inner_area)
     };
 
-    // Render with selection highlighting
+    // Render with selection highlighting and minimap
     let content = app.markdown_scroll.content().unwrap_or("").to_string();
-    let (text, all_lines) = render_markdown_interactive_with_selection(
+    let render_options = MarkdownRenderOptions::default()
+        .show_minimap(true)
+        .minimap_width(12);
+
+    let all_lines = render_markdown_with_minimap(
         &content,
         &mut app.markdown_scroll,
         content_area,
+        frame.buffer_mut(),
         app.markdown_split.is_dragging,
         &app.markdown_selection,
+        &render_options,
     );
 
     // Store rendered lines for selection text extraction
     app.markdown_rendered_lines = all_lines;
-
-    // Render the text
-    let paragraph = Paragraph::new(text);
-    frame.render_widget(paragraph, content_area);
 
     // Render statusline using the widget's built-in function
     let mode = if selection_active {

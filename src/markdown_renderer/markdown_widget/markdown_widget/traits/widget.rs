@@ -4,11 +4,12 @@ use ratatui::{layout::Rect, widgets::Widget};
 
 use super::super::MarkdownWidget;
 use crate::markdown_renderer::markdown_widget::render_markdown_interactive_with_options;
+use crate::markdown_renderer::minimap::Minimap;
 
 impl<'a> Widget for MarkdownWidget<'a> {
     fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
         // Reserve space for statusline if enabled
-        let (content_area, statusline_area) = if self.show_statusline && area.height > 1 {
+        let (main_area, statusline_area) = if self.show_statusline && area.height > 1 {
             (
                 Rect {
                     height: area.height.saturating_sub(1),
@@ -22,6 +23,25 @@ impl<'a> Widget for MarkdownWidget<'a> {
             )
         } else {
             (area, None)
+        };
+
+        // Reserve space for minimap if enabled
+        let minimap_width = self.minimap_config.width;
+        let (content_area, minimap_area) = if self.show_minimap && main_area.width > minimap_width + 2
+        {
+            (
+                Rect {
+                    width: main_area.width.saturating_sub(minimap_width + 1), // +1 for gap
+                    ..main_area
+                },
+                Some(Rect {
+                    x: main_area.x + main_area.width.saturating_sub(minimap_width),
+                    width: minimap_width,
+                    ..main_area
+                }),
+            )
+        } else {
+            (main_area, None)
         };
 
         self.scroll.update_viewport(content_area);
@@ -46,6 +66,20 @@ impl<'a> Widget for MarkdownWidget<'a> {
                     }
                 }
             }
+        }
+
+        // Render minimap
+        if let Some(mm_area) = minimap_area {
+            let viewport_start = self.scroll.scroll_offset;
+            let viewport_end = viewport_start + content_area.height as usize;
+            let total_lines = self.scroll.total_lines;
+
+            let minimap = Minimap::new(self.content)
+                .width(mm_area.width)
+                .viewport(viewport_start, viewport_end, total_lines)
+                .config(self.minimap_config.clone());
+
+            minimap.render(mm_area, buf);
         }
 
         // Render statusline

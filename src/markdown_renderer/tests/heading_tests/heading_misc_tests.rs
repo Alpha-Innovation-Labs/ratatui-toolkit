@@ -7,8 +7,8 @@ fn find_line_with_icon<'a>(
     icon: &str,
 ) -> Option<&'a ratatui::text::Line<'a>> {
     text.lines.iter().find(|line| {
-        // Icon is now in span[1] (span[0] is collapse indicator)
-        line.spans.len() > 1 && line.spans[1].content.contains(icon)
+        // Icon is now in span[2] (span[0] is indent, span[1] is collapse indicator)
+        line.spans.len() > 2 && line.spans[2].content.contains(icon)
     })
 }
 
@@ -35,8 +35,8 @@ fn test_bold_text_in_heading() {
 
     let heading_line = find_line_with_icon(&text, "󰲡").expect("Should find heading with icon");
 
-    // Span[1] is the icon span which should be bold
-    assert!(heading_line.spans[1]
+    // Span[2] is the icon span which should be bold
+    assert!(heading_line.spans[2]
         .style
         .add_modifier
         .contains(Modifier::BOLD));
