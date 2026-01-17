@@ -18,11 +18,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Module Architecture** - All components restructured to follow consistent organization
+  - Type definitions in `mod.rs` (struct/enum only, no impl blocks)
+  - Constructors in `constructors/` directory (`new`, `with_*`, builders)
+  - Instance methods in `methods/` directory
+  - Trait implementations in `traits/` directory
+  - Components restructured: Button, ClickableScrollbar, Dialog, FileSystemTree, FuzzyFinder, HotkeyFooter, HotkeyModal, MenuBar, Pane, ResizableSplit, StatusBar, StatusLineStacked
+
 - **Markdown Renderer** - Complete rewrite with new `styled_line` system
-  - Added syntax highlighting support
-  - Added theme configuration
-  - Added scroll manager and markdown widget
+  - Added syntax highlighting support for code blocks
+  - Added theme configuration via `MarkdownStyle`
+  - Added `MarkdownScrollManager` for scroll state management
+  - Added `MarkdownWidget` as a stateful widget
   - Improved code block rendering with borders
+  - Added expandable/collapsible section support
 
 - **Toast Module** - Refactored into `constructors/` and `methods/` for better organization
 
@@ -86,5 +95,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 10 runnable examples demonstrating each major component
 - README with quick start guide and feature comparison
 
-[Unreleased]: https://github.com/alpha-innovation-labs/ratatui-toolkit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/alpha-innovation-labs/ratatui-toolkit/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/alpha-innovation-labs/ratatui-toolkit/compare/v0.1.0...v0.1.11
 [0.1.0]: https://github.com/alpha-innovation-labs/ratatui-toolkit/releases/tag/v0.1.0

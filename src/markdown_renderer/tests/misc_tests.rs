@@ -1,4 +1,24 @@
 use crate::markdown_renderer::render_markdown;
+use crate::markdown_renderer::render_markdown_to_styled_lines;
+
+#[test]
+fn test_max_source_line_matches_file() {
+    let content = include_str!("../../../examples/markdown_demo_full.md");
+    let source_lines = content.lines().count();
+    let styled_lines = render_markdown_to_styled_lines(content);
+
+    // Get the maximum source line from styled lines
+    let max_source_line = styled_lines.iter().map(|l| l.source_line).max().unwrap_or(0);
+
+    // The max source line should match the source file line count
+    // (or be very close - within 1-2 lines due to trailing newlines or empty line handling)
+    assert!(
+        max_source_line >= source_lines - 2 && max_source_line <= source_lines + 1,
+        "Expected max source line ({}) to match source lines ({})",
+        max_source_line,
+        source_lines
+    );
+}
 
 #[test]
 fn test_markdown_with_frontmatter_like_content() {

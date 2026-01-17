@@ -19,11 +19,19 @@ fn test_h1_has_correct_icon() {
     let heading_line =
         find_line_with_text(&text, "Test Heading").expect("Should find heading line");
 
-    let content = &heading_line.spans[0].content;
+    // Span 0 is collapse indicator, Span 1 is icon
+    let collapse_indicator = &heading_line.spans[0].content;
+    let icon = &heading_line.spans[1].content;
+
     assert!(
-        content.starts_with("󰲡 "),
-        "H1 should start with icon '󰲡 ', got: {}",
-        content
+        collapse_indicator == "▼ " || collapse_indicator == "▶ ",
+        "H1 should start with collapse indicator, got: {}",
+        collapse_indicator
+    );
+    assert!(
+        icon.contains("󰲡"),
+        "H1 should have icon '󰲡', got: {}",
+        icon
     );
 }
 
@@ -35,11 +43,19 @@ fn test_h2_has_correct_icon() {
     let heading_line =
         find_line_with_text(&text, "Test Heading").expect("Should find heading line");
 
-    let content = &heading_line.spans[0].content;
+    // Span 0 is collapse indicator, Span 1 is icon
+    let collapse_indicator = &heading_line.spans[0].content;
+    let icon = &heading_line.spans[1].content;
+
     assert!(
-        content.starts_with("󰲣 "),
-        "H2 should start with icon '󰲣 ', got: {}",
-        content
+        collapse_indicator == "▼ " || collapse_indicator == "▶ ",
+        "H2 should start with collapse indicator, got: {}",
+        collapse_indicator
+    );
+    assert!(
+        icon.contains("󰲣"),
+        "H2 should have icon '󰲣', got: {}",
+        icon
     );
 }
 
@@ -51,10 +67,18 @@ fn test_h3_has_correct_icon() {
     let heading_line =
         find_line_with_text(&text, "Test Heading").expect("Should find heading line");
 
-    let content = &heading_line.spans[0].content;
+    // Span 0 is collapse indicator, Span 1 is icon
+    let collapse_indicator = &heading_line.spans[0].content;
+    let icon = &heading_line.spans[1].content;
+
     assert!(
-        content.starts_with("󰲥 "),
-        "H3 should start with icon '󰲥 ', got: {}",
-        content
+        collapse_indicator == "▼ " || collapse_indicator == "▶ ",
+        "H3 should start with collapse indicator, got: {}",
+        collapse_indicator
+    );
+    assert!(
+        icon.contains("󰲥"),
+        "H3 should have icon '󰲥', got: {}",
+        icon
     );
 }

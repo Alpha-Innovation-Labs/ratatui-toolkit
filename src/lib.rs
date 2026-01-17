@@ -150,7 +150,8 @@ pub use resizable_split::{ResizableSplit, SplitDirection};
 
 #[cfg(feature = "tree")]
 pub use tree_view::{
-    get_visible_paths, NodeState, TreeKeyBindings, TreeNavigator, TreeNode, TreeView, TreeViewState,
+    get_visible_paths, NodeState, TreeKeyBindings, TreeNavigator, TreeNode, TreeView,
+    TreeViewRef, TreeViewState,
 };
 
 #[cfg(feature = "menu")]
@@ -172,8 +173,12 @@ pub use hotkey_modal::{functions::render_hotkey_modal, Hotkey, HotkeyModalConfig
 
 #[cfg(feature = "markdown")]
 pub use markdown_renderer::{
-    handle_mouse_event, render_markdown, render_markdown_interactive, render_markdown_with_style,
-    MarkdownScrollManager, MarkdownStyle, MarkdownWidget,
+    copy_selection_to_clipboard, handle_mouse_event, handle_mouse_event_with_double_click,
+    handle_mouse_event_with_selection, render_markdown, render_markdown_interactive,
+    render_markdown_interactive_with_selection, render_markdown_statusline,
+    render_markdown_with_style, DoubleClickState, GitStats, MarkdownDoubleClickEvent,
+    MarkdownEvent, MarkdownScrollManager, MarkdownStyle, MarkdownWidget, MarkdownWidgetMode,
+    SelectionMouseResult, SelectionState,
 };
 
 #[cfg(feature = "terminal")]
@@ -225,7 +230,7 @@ pub mod prelude {
     #[cfg(feature = "tree")]
     pub use crate::tree_view::{
         get_visible_paths, NodeState, TreeKeyBindings, TreeNavigator, TreeNode, TreeView,
-        TreeViewState,
+        TreeViewRef, TreeViewState,
     };
 
     #[cfg(feature = "menu")]

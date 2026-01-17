@@ -25,7 +25,7 @@ YAML frontmatter at the top is parsed and displayed as a collapsible section. Th
 
 `Inline code` with monospaced styling
 
-~~Strikethrough~~ (not currently rendered but parsed)
+~~Strikethrough~~ text with strike-through effect
 
 ---
 
@@ -195,93 +195,15 @@ cargo build --release
 ---
 
 ## 8. Headings
-
 ### Heading Level 1
-
-Usually used for page titles.
-
 ### Heading Level 2
-
-Used for major sections.
-
 #### Heading Level 3
-
-For subsections.
-
 ##### Heading Level 4
-
-Even smaller subsections.
-
-###### Heading Level 5
-
-Rarely used.
-
+##### Heading Level 5
 ###### Heading Level 6
-
-The smallest heading.
-
 ---
 
 ## 9. Horizontal Rules
 
 ---
 
-***
-
----
-
-## 10. Mixed Content Example
-
-### Complete Document Structure
-
-# Main Title
-
-## Introduction
-
-This is a **comprehensive** demo showing *all* markdown features supported by our renderer.
-
-### Features Overview
-
-| Category | Features |
-|----------|----------|
-| Text | Bold, Italic, Inline Code |
-| Blocks | Headings, Quotes, Lists |
-| Code | Fenced blocks with language |
-| Tables | With alignment support |
-| Links | Standard and autolinks |
-
-### Usage Example
-
-Here's how you might use the markdown renderer:
-
-```rust
-use ratatui_toolkit::render_markdown;
-
-let markdown = "# Hello\n\n**Bold** and *italic*.";
-let text = render_markdown(markdown, Some(80));
-```
-
-### Notes
-
-> **Warning**: Always test your markdown with the actual renderer.
->
-> Different parsers may have slight variations in behavior.
-
----
-
-## 11. Deeply Nested Structures
-
-1. Level 1
-   - Level 2
-     1. Level 3 ordered
-     2. Level 3 ordered
-   - Level 2 bullet
-     > Level 2 quote
-     > > Level 3 quote
-   - Level 2 bullet
-2. Level 1 continued
-3. Level 1 end
-
----
-
-*End of Markdown Demo*

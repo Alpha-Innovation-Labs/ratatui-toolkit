@@ -7,15 +7,15 @@ fn test_code_block_with_border() {
     let markdown = "```rust\nfn main() {}\n```";
     let text = render_markdown(markdown, Some(200));
 
-    // Should have border lines (using box-drawing characters)
+    // Should have border lines (using rounded box-drawing characters)
     let has_top_border = text
         .lines
         .iter()
-        .any(|line| line.spans.iter().any(|span| span.content.contains("┌")));
+        .any(|line| line.spans.iter().any(|span| span.content.contains("╭")));
     let has_bottom_border = text
         .lines
         .iter()
-        .any(|line| line.spans.iter().any(|span| span.content.contains("└")));
+        .any(|line| line.spans.iter().any(|span| span.content.contains("╰")));
 
     assert!(has_top_border, "Code block should have top border");
     assert!(has_bottom_border, "Code block should have bottom border");

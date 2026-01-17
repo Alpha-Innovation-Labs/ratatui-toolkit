@@ -379,6 +379,205 @@ impl<'a, T> Widget for &TreeView<'a, T> {
     }
 }
 
+/// Type alias for node render function that borrows data (for TreeViewRef)
+pub type NodeRenderRefFn<'a, T> = Box<dyn Fn(&T, &NodeState) -> Line<'a> + 'a>;
+
+/// Tree view widget that borrows nodes instead of owning them.
+///
+/// This is useful when you want to avoid cloning the tree on every render frame.
+/// Unlike `TreeView` which takes ownership of nodes, `TreeViewRef` borrows them,
+/// allowing the original data to remain in place after rendering.
+pub struct TreeViewRef<'a, 'b, T> {
+    /// Reference to root nodes of the tree
+    nodes: &'b [TreeNode<T>],
+    /// Block to wrap the tree
+    block: Option<Block<'a>>,
+    /// Render callback for custom node display
+    render_fn: NodeRenderRefFn<'a, T>,
+    /// Default expand icon
+    expand_icon: &'a str,
+    /// Default collapse icon
+    collapse_icon: &'a str,
+    /// Style for selected row background (full-width highlight)
+    highlight_style: Option<Style>,
+}
+
+impl<'a, 'b, T> TreeViewRef<'a, 'b, T> {
+    /// Create a new tree view with a reference to nodes (avoids cloning)
+    pub fn new(nodes: &'b [TreeNode<T>]) -> Self {
+        Self {
+            nodes,
+            block: None,
+            render_fn: Box::new(|_data, _state| Line::from("Node")),
+            expand_icon: "▶",
+            collapse_icon: "▼",
+            highlight_style: None,
+        }
+    }
+
+    /// Set the block to wrap the tree
+    pub fn block(mut self, block: Block<'a>) -> Self {
+        self.block = Some(block);
+        self
+    }
+
+    /// Set custom expand/collapse icons
+    pub fn icons(mut self, expand: &'a str, collapse: &'a str) -> Self {
+        self.expand_icon = expand;
+        self.collapse_icon = collapse;
+        self
+    }
+
+    /// Set the render function for nodes
+    pub fn render_fn<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&T, &NodeState) -> Line<'a> + 'a,
+    {
+        self.render_fn = Box::new(f);
+        self
+    }
+
+    /// Set the highlight style for selected rows (full-width background)
+    pub fn highlight_style(mut self, style: Style) -> Self {
+        self.highlight_style = Some(style);
+        self
+    }
+
+    /// Flatten the tree into a list of visible items
+    fn flatten_tree(&self, state: &TreeViewState) -> Vec<(Line<'a>, Vec<usize>)> {
+        let mut items = Vec::new();
+
+        /// Context for tree traversal to reduce function parameters
+        struct TraverseContext<'a, 'c, T> {
+            state: &'c TreeViewState,
+            render_fn: &'c dyn Fn(&T, &NodeState) -> Line<'a>,
+            expand_icon: &'c str,
+            collapse_icon: &'c str,
+        }
+
+        fn traverse<'a, T>(
+            nodes: &[TreeNode<T>],
+            current_path: Vec<usize>,
+            level: usize,
+            ctx: &TraverseContext<'a, '_, T>,
+            items: &mut Vec<(Line<'a>, Vec<usize>)>,
+        ) {
+            for (idx, node) in nodes.iter().enumerate() {
+                let mut path = current_path.clone();
+                path.push(idx);
+
+                let is_expanded = ctx.state.is_expanded(&path);
+                let is_selected = ctx.state.selected_path.as_ref() == Some(&path);
+
+                let node_state = NodeState {
+                    is_selected,
+                    is_expanded,
+                    level,
+                    has_children: !node.children.is_empty(),
+                    path: path.clone(),
+                };
+
+                // Render the node with indent and expand/collapse icon
+                let indent = "  ".repeat(level);
+                let expansion_icon = if node.expandable {
+                    if is_expanded {
+                        ctx.collapse_icon
+                    } else {
+                        ctx.expand_icon
+                    }
+                } else {
+                    " "
+                };
+
+                // Get the custom rendered line
+                let custom_line = (ctx.render_fn)(&node.data, &node_state);
+
+                // Prepend indent and expansion icon
+                let mut spans = vec![
+                    Span::raw(indent),
+                    Span::styled(
+                        format!("{} ", expansion_icon),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ];
+                spans.extend(custom_line.spans);
+
+                items.push((Line::from(spans), path.clone()));
+
+                // Recursively render children if expanded
+                if is_expanded && !node.children.is_empty() {
+                    traverse(&node.children, path, level + 1, ctx, items);
+                }
+            }
+        }
+
+        let ctx = TraverseContext {
+            state,
+            render_fn: &self.render_fn,
+            expand_icon: self.expand_icon,
+            collapse_icon: self.collapse_icon,
+        };
+
+        traverse(self.nodes, Vec::new(), 0, &ctx, &mut items);
+
+        items
+    }
+}
+
+impl<'a, 'b, T> StatefulWidget for TreeViewRef<'a, 'b, T> {
+    type State = TreeViewState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let area = match self.block {
+            Some(ref b) => {
+                let inner = b.inner(area);
+                b.clone().render(area, buf);
+                inner
+            }
+            None => area,
+        };
+
+        if area.height == 0 {
+            return;
+        }
+
+        let items = self.flatten_tree(state);
+        let visible_height = area.height as usize;
+
+        // Adjust scroll offset to ensure selected item is visible
+        if let Some(ref selected) = state.selected_path {
+            if let Some(selected_idx) = items.iter().position(|(_, path)| path == selected) {
+                if selected_idx < state.offset {
+                    state.offset = selected_idx;
+                } else if selected_idx >= state.offset + visible_height {
+                    state.offset = selected_idx.saturating_sub(visible_height - 1);
+                }
+            }
+        }
+
+        // Render visible items
+        for (i, (line, path)) in items
+            .iter()
+            .skip(state.offset)
+            .take(visible_height)
+            .enumerate()
+        {
+            let y = area.y + i as u16;
+
+            // Fill background for selected row (full-width highlight like Yazi)
+            let is_selected = state.selected_path.as_ref() == Some(path);
+            if is_selected && self.highlight_style.is_some() {
+                let style = self.highlight_style.unwrap();
+                for x in area.x..(area.x + area.width) {
+                    buf[(x, y)].set_style(style);
+                }
+            }
+
+            buf.set_line(area.x, y, line, area.width);
+        }
+    }
+}
+
 /// Get all visible paths (flattened tree with expansion state)
 pub fn get_visible_paths<T>(nodes: &[TreeNode<T>], state: &TreeViewState) -> Vec<Vec<usize>> {
     let mut paths = Vec::new();

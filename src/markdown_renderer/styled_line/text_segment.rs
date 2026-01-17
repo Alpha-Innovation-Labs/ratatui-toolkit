@@ -2,6 +2,17 @@
 //!
 //! Represents different types of text segments within markdown content.
 
+/// Checkbox state for task lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckboxState {
+    /// Unchecked: [ ]
+    Unchecked,
+    /// Checked: [x] or [X]
+    Checked,
+    /// Todo/In Progress: [-]
+    Todo,
+}
+
 #[derive(Debug, Clone)]
 pub enum TextSegment {
     /// Plain text.
@@ -14,9 +25,23 @@ pub enum TextSegment {
     BoldItalic(String),
     /// Inline code with background.
     InlineCode(String),
-    /// Link text.
-    #[allow(dead_code)]
-    Link { text: String, url: String },
+    /// Link text with URL and whether it's an autolink (bare URL).
+    Link {
+        text: String,
+        url: String,
+        /// True if this is an autolink (bare URL), false if `[text](url)` style.
+        is_autolink: bool,
+        /// Whether the link text is bold.
+        bold: bool,
+        /// Whether the link text is italic.
+        italic: bool,
+        /// Whether to show the icon (only true for first segment of a link).
+        show_icon: bool,
+    },
+    /// Strikethrough text.
+    Strikethrough(String),
     /// HTML tag or autolink.
     Html(String),
+    /// Checkbox for task lists.
+    Checkbox(CheckboxState),
 }

@@ -11,7 +11,7 @@ pub fn render(
     _styled_line: &StyledLine,
     level: u8,
     text: &[super::super::TextSegment],
-    _collapsed: bool,
+    collapsed: bool,
     width: usize,
 ) -> Vec<Line<'static>> {
     let icon = HEADING_ICONS
@@ -20,10 +20,19 @@ pub fn render(
     let bg = heading_bg_color(level);
     let fg = heading_fg_color(level);
 
-    let mut spans = vec![Span::styled(
-        icon.to_string(),
-        Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
-    )];
+    // Collapse indicator
+    let collapse_indicator = if collapsed { "▶ " } else { "▼ " };
+
+    let mut spans = vec![
+        Span::styled(
+            collapse_indicator.to_string(),
+            Style::default().fg(fg).bg(bg),
+        ),
+        Span::styled(
+            icon.to_string(),
+            Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD),
+        ),
+    ];
 
     for segment in text {
         spans.push(render_text_segment(segment, Style::default().fg(fg).bg(bg)));

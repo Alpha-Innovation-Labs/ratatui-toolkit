@@ -6,9 +6,10 @@ fn find_line_with_icon<'a>(
     text: &'a ratatui::text::Text<'a>,
     icon: &str,
 ) -> Option<&'a ratatui::text::Line<'a>> {
-    text.lines
-        .iter()
-        .find(|line| !line.spans.is_empty() && line.spans[0].content.starts_with(icon))
+    text.lines.iter().find(|line| {
+        // Icon is now in span[1] (span[0] is collapse indicator)
+        line.spans.len() > 1 && line.spans[1].content.contains(icon)
+    })
 }
 
 #[test]
@@ -16,9 +17,10 @@ fn test_h1_has_correct_colors() {
     let markdown = "# Test";
     let text = render_markdown(markdown, Some(200));
 
-    let heading_line = find_line_with_icon(&text, "󰲡 ").expect("Should find heading line");
+    let heading_line = find_line_with_icon(&text, "󰲡").expect("Should find heading line");
 
-    let style = heading_line.spans[0].style;
+    // Span[1] is the icon span with heading style
+    let style = heading_line.spans[1].style;
     assert_eq!(
         style.fg,
         Some(Color::Rgb(255, 180, 255)),
@@ -36,9 +38,10 @@ fn test_h2_has_correct_colors() {
     let markdown = "## Test";
     let text = render_markdown(markdown, Some(200));
 
-    let heading_line = find_line_with_icon(&text, "󰲣 ").expect("Should find heading line");
+    let heading_line = find_line_with_icon(&text, "󰲣").expect("Should find heading line");
 
-    let style = heading_line.spans[0].style;
+    // Span[1] is the icon span with heading style
+    let style = heading_line.spans[1].style;
     assert_eq!(
         style.fg,
         Some(Color::Rgb(130, 180, 255)),
@@ -56,9 +59,10 @@ fn test_h3_has_correct_colors() {
     let markdown = "### Test";
     let text = render_markdown(markdown, Some(200));
 
-    let heading_line = find_line_with_icon(&text, "󰲥 ").expect("Should find heading line");
+    let heading_line = find_line_with_icon(&text, "󰲥").expect("Should find heading line");
 
-    let style = heading_line.spans[0].style;
+    // Span[1] is the icon span with heading style
+    let style = heading_line.spans[1].style;
     assert_eq!(
         style.fg,
         Some(Color::Rgb(130, 255, 180)),

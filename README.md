@@ -81,7 +81,7 @@ let toast = Toast::new("File saved successfully!")
     .duration(Duration::from_secs(3));
 
 // Render markdown
-let text = render_markdown("# Hello\n\nThis is **bold** and *italic*");
+let text = render_markdown("# Hello\n\nThis is **bold** and *italic*", None);
 ```
 
 ## Examples
@@ -165,20 +165,30 @@ render_toasts(frame, area, &manager);
 ### Markdown Rendering
 
 ```rust
-use ratatui_toolkit::{render_markdown, render_markdown_with_style, MarkdownStyle};
+use ratatui_toolkit::{
+    render_markdown, render_markdown_with_style, render_markdown_interactive,
+    MarkdownStyle, MarkdownWidget, MarkdownScrollManager,
+};
 
 // Simple rendering
-let text = render_markdown("# Title\n\nParagraph with **bold** text.");
+let text = render_markdown("# Title\n\nParagraph with **bold** text.", None);
 
-// Custom styling
-let style = MarkdownStyle::default()
-    .heading_color(Color::Cyan)
-    .code_bg(Color::DarkGray);
+// Custom styling with syntax highlighting
+let style = MarkdownStyle::default();
 let text = render_markdown_with_style(markdown_content, &style);
 
-// Render to frame
-frame.render_widget(Paragraph::new(text), area);
+// Interactive widget with scroll management
+let mut scroll_manager = MarkdownScrollManager::new();
+let widget = MarkdownWidget::new(markdown_content)
+    .with_style(style);
+frame.render_stateful_widget(widget, area, &mut scroll_manager);
 ```
+
+**Markdown Features:**
+- Syntax highlighting for code blocks
+- Configurable themes
+- Scroll management for long documents
+- Expandable/collapsible sections
 
 ### Terminal Emulator (TermTui)
 
@@ -266,6 +276,30 @@ let layout = MasterLayout::new()
 | MasterLayout | `MasterLayoutKeyBindings` | `.with_keybindings()` |
 
 ## Architecture
+
+### Module Structure
+
+All components follow a consistent module organization pattern for maintainability:
+
+```
+src/component_name/
+├── mod.rs              # Type definition only (struct/enum)
+├── constructors/       # Constructors and builders (new, with_*, builder)
+│   ├── mod.rs
+│   ├── new.rs
+│   └── with_*.rs
+├── methods/            # Instance methods (&self, &mut self)
+│   ├── mod.rs
+│   └── method_name.rs
+└── traits/             # Trait implementations (Widget, Default, etc.)
+    ├── mod.rs
+    └── trait_name.rs
+```
+
+This structure ensures:
+- **Single responsibility**: Each file contains one impl block
+- **Easy navigation**: Find constructors in `constructors/`, methods in `methods/`
+- **Consistent patterns**: All components organized identically
 
 ### Component Pattern
 

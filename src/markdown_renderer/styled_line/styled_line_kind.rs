@@ -1,10 +1,13 @@
 //! Kind of styled line for markdown rendering.
 
-use super::TextSegment;
+use super::{ColumnAlignment, TextSegment};
 
 /// Represents the kind of styled line.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum StyledLineKind {
+    /// Empty line (default).
+    #[default]
+    Empty,
     /// Heading with level (1-6).
     Heading {
         level: u8,
@@ -18,16 +21,28 @@ pub enum StyledLineKind {
     #[allow(dead_code)]
     HeadingBorder { level: u8 },
     /// Code block header with language.
-    CodeBlockHeader { language: String },
+    CodeBlockHeader {
+        language: String,
+        /// Blockquote nesting depth (0 = not in blockquote)
+        blockquote_depth: usize,
+    },
     /// Code block content line (plain text or syntax highlighted).
     CodeBlockContent {
         /// Plain text content
         content: String,
         /// Syntax highlighted text (if available)
         highlighted: Option<ratatui::text::Text<'static>>,
+        /// Line number (1-indexed)
+        line_number: usize,
+        /// Blockquote nesting depth (0 = not in blockquote)
+        blockquote_depth: usize,
     },
     /// Code block border (top, middle, bottom).
-    CodeBlockBorder(super::CodeBlockBorderKind),
+    CodeBlockBorder {
+        kind: super::CodeBlockBorderKind,
+        /// Blockquote nesting depth (0 = not in blockquote)
+        blockquote_depth: usize,
+    },
     /// Paragraph text with formatting.
     Paragraph(Vec<TextSegment>),
     /// List item with nesting level.
@@ -37,17 +52,23 @@ pub enum StyledLineKind {
         number: Option<usize>,
         content: Vec<TextSegment>,
     },
-    /// Blockquote.
-    Blockquote(Vec<TextSegment>),
+    /// Blockquote with nesting depth.
+    Blockquote {
+        content: Vec<TextSegment>,
+        /// Nesting depth (1 = single >, 2 = >> , etc.)
+        depth: usize,
+    },
     /// Table row.
-    TableRow { cells: Vec<String>, is_header: bool },
+    TableRow {
+        cells: Vec<String>,
+        is_header: bool,
+        alignments: Vec<ColumnAlignment>,
+    },
     /// Table border.
     TableBorder(super::TableBorderKind),
     /// Horizontal rule.
     HorizontalRule,
-    /// Empty line.
-    Empty,
-    /// YAML frontmatter (collapsible).
+    /// YAML frontmatter (collapsible) - legacy single-block format.
     /// Contains the parsed fields as key-value pairs.
     Frontmatter {
         /// The frontmatter fields (key, value).
@@ -55,6 +76,22 @@ pub enum StyledLineKind {
         /// Whether the frontmatter is collapsed (shows only context_id).
         collapsed: bool,
     },
+    /// Frontmatter top border with collapse icon.
+    FrontmatterStart {
+        /// Whether the frontmatter section is collapsed.
+        collapsed: bool,
+        /// Context ID to show when collapsed (from frontmatter fields).
+        context_id: Option<String>,
+    },
+    /// A single frontmatter field (key: value).
+    FrontmatterField {
+        /// The field key.
+        key: String,
+        /// The field value.
+        value: String,
+    },
+    /// Frontmatter bottom border.
+    FrontmatterEnd,
     /// Expandable content block (e.g., "Show more" / "Show less").
     Expandable {
         /// Unique ID for tracking state

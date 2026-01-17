@@ -10,6 +10,8 @@
 //! - Styled bullet markers for lists
 //! - Left border for blockquotes
 
+mod file_watcher;
+mod markdown_source;
 mod markdown_style;
 mod markdown_widget;
 mod render_markdown_to_lines;
@@ -21,15 +23,25 @@ mod theme;
 #[cfg(test)]
 mod tests;
 
+pub use file_watcher::MarkdownFileWatcher;
+pub use markdown_source::MarkdownSource;
 pub use markdown_style::MarkdownStyle;
-pub use markdown_widget::{handle_mouse_event, render_markdown_interactive, MarkdownWidget};
+pub use markdown_widget::{
+    copy_selection_to_clipboard, handle_mouse_event, handle_mouse_event_with_double_click,
+    handle_mouse_event_with_selection, render_markdown_interactive,
+    render_markdown_interactive_with_selection, render_markdown_statusline, DoubleClickState,
+    GitStats, MarkdownDoubleClickEvent, MarkdownEvent, MarkdownWidget, MarkdownWidgetMode,
+    SelectionMouseResult, SelectionState,
+};
 pub use render_markdown_to_lines::{
     render_markdown_to_lines, render_markdown_to_styled_lines,
     render_markdown_to_styled_lines_with_frontmatter_state,
 };
 pub use scroll_manager::{ExpandableState, MarkdownScrollManager};
 pub use styled_line::methods::render::render as render_styled_line;
-pub use styled_line::{StyledLine, StyledLineKind, TextSegment};
+pub use styled_line::methods::render::render_with_options as render_styled_line_with_options;
+pub use styled_line::methods::render::RenderOptions;
+pub use styled_line::{CodeBlockColors, CodeBlockTheme, StyledLine, StyledLineKind, TextSegment};
 pub use syntax_highlighter::{SyntaxHighlighter, SyntaxThemeVariant};
 pub use theme::{
     get_effective_theme_variant, load_theme_from_json, palettes, ColorMapping, ColorPalette,

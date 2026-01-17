@@ -1,19 +1,21 @@
 //! Render markdown content to styled lines for display.
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
+use unicode_width::UnicodeWidthStr;
 
 use super::styled_line::methods::render::render as styled_line_render;
 use super::styled_line::{
-    CodeBlockBorderKind, StyledLine, StyledLineKind, TableBorderKind, TextSegment,
+    CodeBlockBorderKind, ColumnAlignment, StyledLine, StyledLineKind, TableBorderKind, TextSegment,
 };
 use super::SyntaxHighlighter;
 
 /// Parse YAML frontmatter from the beginning of content.
-/// Returns (frontmatter_fields, remaining_content).
-fn parse_frontmatter(content: &str) -> (Option<Vec<(String, String)>>, &str) {
+/// Returns (frontmatter_fields, remaining_content, frontmatter_line_count).
+/// frontmatter_line_count includes the opening and closing --- lines.
+fn parse_frontmatter(content: &str) -> (Option<Vec<(String, String)>>, &str, usize) {
     let trimmed = content.trim_start();
     if !trimmed.starts_with("---") {
-        return (None, content);
+        return (None, content, 0);
     }
 
     // Find the closing ---
@@ -21,6 +23,10 @@ fn parse_frontmatter(content: &str) -> (Option<Vec<(String, String)>>, &str) {
     if let Some(end_pos) = after_opening.find("\n---") {
         let frontmatter_text = &after_opening[..end_pos];
         let remaining = &after_opening[end_pos + 4..]; // Skip past "\n---"
+
+        // Count lines: 1 for opening ---, lines in frontmatter_text, 1 for closing ---
+        let frontmatter_lines = frontmatter_text.lines().count();
+        let total_lines = 1 + frontmatter_lines + 1; // opening + content + closing
 
         // Parse the frontmatter fields
         let mut fields = Vec::new();
@@ -45,11 +51,11 @@ fn parse_frontmatter(content: &str) -> (Option<Vec<(String, String)>>, &str) {
         }
 
         if !fields.is_empty() {
-            return (Some(fields), remaining);
+            return (Some(fields), remaining, total_lines);
         }
     }
 
-    (None, content)
+    (None, content, 0)
 }
 
 /// Render markdown content to a vector of styled lines.
@@ -73,18 +79,56 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
     let mut lines = Vec::new();
 
     // Parse frontmatter first
-    let (frontmatter, remaining_content) = parse_frontmatter(content);
+    let (frontmatter, remaining_content, frontmatter_line_count) = parse_frontmatter(content);
 
-    // Add frontmatter if present
+    // Track current source line (1-indexed)
+    let mut current_source_line: usize = 1;
+
+    // Add frontmatter if present - each field gets its own line
     if let Some(fields) = frontmatter {
+        // Get context_id for collapsed display
+        let context_id = fields
+            .iter()
+            .find(|(k, _)| k == "context_id")
+            .map(|(_, v)| v.clone());
+
+        // Line 1: Opening --- with collapse icon
         lines.push(StyledLine {
-            kind: StyledLineKind::Frontmatter {
-                fields,
+            kind: StyledLineKind::FrontmatterStart {
                 collapsed: frontmatter_collapsed,
+                context_id,
             },
+            section_id: None, // Start is always visible (it's the toggle)
+            source_line: current_source_line,
         });
+        current_source_line += 1;
+
+        // Each field gets its own line (section_id: Some(0) for frontmatter section)
+        for (key, value) in fields {
+            lines.push(StyledLine {
+                kind: StyledLineKind::FrontmatterField {
+                    key,
+                    value,
+                },
+                section_id: Some(0), // Frontmatter section
+                source_line: current_source_line,
+            });
+            current_source_line += 1;
+        }
+
+        // Closing ---
+        lines.push(StyledLine {
+            kind: StyledLineKind::FrontmatterEnd,
+            section_id: Some(0), // Part of frontmatter section
+            source_line: current_source_line,
+        });
+        current_source_line += 1;
+
+        // Empty line after frontmatter
         lines.push(StyledLine {
             kind: StyledLineKind::Empty,
+            section_id: None,
+            source_line: current_source_line,
         });
     }
 
@@ -93,33 +137,64 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
     let mut code_block_lang = String::new();
     let mut code_block_started = false;
     let mut list_stack: Vec<(bool, usize)> = Vec::new(); // (ordered, current_number)
-    let mut in_blockquote = false;
+    let mut blockquote_depth: usize = 0;
+
+    // Section tracking for collapse/expand
+    let mut current_section_id: Option<usize> = None;
+    let mut next_section_id: usize = 1; // Start from 1 (0 is reserved for frontmatter)
 
     // Table state
     let mut in_table = false;
     let mut table_header_done = false;
     let mut current_row_cells: Vec<String> = Vec::new();
     let mut table_col_widths: Vec<usize> = Vec::new();
+    let mut table_alignments: Vec<ColumnAlignment> = Vec::new();
     let mut pending_table_rows: Vec<(Vec<String>, bool)> = Vec::new(); // (cells, is_header)
 
     // Text formatting state
     let mut in_bold = false;
     let mut in_italic = false;
+    let mut in_link = false;
+    let mut link_url = String::new();
+    let mut link_icon_shown = false; // Track if we've shown the icon for the current link
+    let mut in_strikethrough = false;
+
+    // Build byte offset to line number mapping for remaining content
+    let mut byte_to_line: Vec<usize> = Vec::with_capacity(remaining_content.len());
+    let mut line_num = current_source_line;
+    for ch in remaining_content.chars() {
+        for _ in 0..ch.len_utf8() {
+            byte_to_line.push(line_num);
+        }
+        if ch == '\n' {
+            line_num += 1;
+        }
+    }
+    // Helper to get line number from byte offset
+    let get_line = |offset: usize| -> usize {
+        byte_to_line.get(offset).copied().unwrap_or(current_source_line)
+    };
 
     let options = Options::all();
-    let parser = Parser::new_ext(remaining_content, options);
+    let parser = Parser::new_ext(remaining_content, options).into_offset_iter();
 
-    for event in parser {
+    // Track the last event's source line for use in flush_paragraph
+    let mut last_event_source_line = current_source_line;
+
+    for (event, range) in parser {
+        let event_source_line = get_line(range.start);
+        last_event_source_line = event_source_line;
+
         match event {
             Event::Start(tag) => match tag {
                 Tag::Heading { .. } => {
-                    flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
+                    flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, event_source_line);
                 }
                 Tag::Paragraph => {
                     // Nothing special needed at start
                 }
                 Tag::CodeBlock(kind) => {
-                    flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
+                    flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, event_source_line);
                     in_code_block = true;
                     code_block_started = false;
                     code_block_lang = match kind {
@@ -128,7 +203,32 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                     };
                 }
                 Tag::List(start) => {
-                    flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
+                    // If we're inside a list item and have content, create the list item first
+                    if !list_stack.is_empty() && !current_segments.is_empty() {
+                        let depth = list_stack.len().saturating_sub(1);
+                        let (ordered, number) = list_stack.last().copied().unwrap_or((false, 1));
+                        let content = std::mem::take(&mut current_segments);
+
+                        lines.push(StyledLine {
+                            kind: StyledLineKind::ListItem {
+                                depth,
+                                ordered,
+                                number: if ordered { Some(number) } else { None },
+                                content,
+                            },
+                            section_id: current_section_id,
+                            source_line: event_source_line,
+                        });
+
+                        // Increment number for ordered lists
+                        if let Some((is_ordered, num)) = list_stack.last_mut() {
+                            if *is_ordered {
+                                *num += 1;
+                            }
+                        }
+                    } else {
+                        flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, event_source_line);
+                    }
                     let ordered = start.is_some();
                     let number = start.unwrap_or(1) as usize;
                     list_stack.push((ordered, number));
@@ -137,8 +237,8 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                     // Will be handled with text content
                 }
                 Tag::BlockQuote(_) => {
-                    flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
-                    in_blockquote = true;
+                    flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, event_source_line);
+                    blockquote_depth += 1;
                 }
                 Tag::Emphasis => {
                     in_italic = true;
@@ -146,15 +246,28 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                 Tag::Strong => {
                     in_bold = true;
                 }
-                Tag::Link { .. } => {
-                    // We'll capture the text and URL
-                    // For now, treat like plain text until we see the end
+                Tag::Link { dest_url, .. } => {
+                    in_link = true;
+                    link_url = dest_url.to_string();
+                    link_icon_shown = false; // Reset for new link
                 }
-                Tag::Table(_alignments) => {
-                    flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
+                Tag::Strikethrough => {
+                    in_strikethrough = true;
+                }
+                Tag::Table(alignments) => {
+                    flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, event_source_line);
                     in_table = true;
                     table_header_done = false;
                     table_col_widths.clear();
+                    table_alignments = alignments
+                        .iter()
+                        .map(|a| match a {
+                            pulldown_cmark::Alignment::None => ColumnAlignment::None,
+                            pulldown_cmark::Alignment::Left => ColumnAlignment::Left,
+                            pulldown_cmark::Alignment::Center => ColumnAlignment::Center,
+                            pulldown_cmark::Alignment::Right => ColumnAlignment::Right,
+                        })
+                        .collect();
                     pending_table_rows.clear();
                 }
                 Tag::TableHead => {
@@ -182,7 +295,11 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
 
                     let text = std::mem::take(&mut current_segments);
 
-                    let section_id = lines.len(); // Index where this heading will be
+                    // Create new section for this heading
+                    let section_id = next_section_id;
+                    next_section_id += 1;
+                    current_section_id = Some(section_id);
+
                     lines.push(StyledLine {
                         kind: StyledLineKind::Heading {
                             level: level_num,
@@ -190,26 +307,44 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                             section_id,
                             collapsed: false, // Default to expanded
                         },
-                    });
-                    // Add empty line after heading for visual spacing
-                    // (markdown blank lines between block elements don't generate events)
-                    lines.push(StyledLine {
-                        kind: StyledLineKind::Empty,
+                        section_id: None, // Headings themselves are not in a section (always visible)
+                        source_line: event_source_line,
                     });
                 }
                 TagEnd::Paragraph => {
-                    flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
-                    lines.push(StyledLine {
-                        kind: StyledLineKind::Empty,
-                    });
+                    flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, event_source_line);
+                    // Add spacing line - use blockquote if we're inside one
+                    if blockquote_depth > 0 {
+                        lines.push(StyledLine {
+                            kind: StyledLineKind::Blockquote {
+                                content: vec![],
+                                depth: blockquote_depth,
+                            },
+                            section_id: current_section_id,
+                            source_line: event_source_line,
+                        });
+                    } else {
+                        lines.push(StyledLine {
+                            kind: StyledLineKind::Empty,
+                            section_id: current_section_id,
+                            source_line: event_source_line,
+                        });
+                    }
                 }
                 TagEnd::CodeBlock => {
                     // End code block
                     lines.push(StyledLine {
-                        kind: StyledLineKind::CodeBlockBorder(CodeBlockBorderKind::Bottom),
+                        kind: StyledLineKind::CodeBlockBorder {
+                            kind: CodeBlockBorderKind::Bottom,
+                            blockquote_depth,
+                        },
+                        section_id: current_section_id,
+                        source_line: event_source_line,
                     });
                     lines.push(StyledLine {
                         kind: StyledLineKind::Empty,
+                        section_id: current_section_id,
+                        source_line: event_source_line,
                     });
                     in_code_block = false;
                     code_block_lang.clear();
@@ -219,6 +354,8 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                     if list_stack.is_empty() {
                         lines.push(StyledLine {
                             kind: StyledLineKind::Empty,
+                            section_id: current_section_id,
+                            source_line: event_source_line,
                         });
                     }
                 }
@@ -235,6 +372,8 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                                 number: if ordered { Some(number) } else { None },
                                 content,
                             },
+                            section_id: current_section_id,
+                            source_line: event_source_line,
                         });
 
                         // Increment number for ordered lists
@@ -246,8 +385,8 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                     }
                 }
                 TagEnd::BlockQuote(_) => {
-                    flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
-                    in_blockquote = false;
+                    flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, event_source_line);
+                    blockquote_depth = blockquote_depth.saturating_sub(1);
                 }
                 TagEnd::Emphasis => {
                     in_italic = false;
@@ -256,7 +395,11 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                     in_bold = false;
                 }
                 TagEnd::Link => {
-                    // Link ended, text already captured
+                    in_link = false;
+                    link_url.clear();
+                }
+                TagEnd::Strikethrough => {
+                    in_strikethrough = false;
                 }
                 TagEnd::Table => {
                     // Render the complete table with proper borders
@@ -266,17 +409,38 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                             kind: StyledLineKind::TableBorder(TableBorderKind::Top(
                                 table_col_widths.clone(),
                             )),
+                            section_id: current_section_id,
+                            source_line: event_source_line,
                         });
 
                         for (cells, is_header) in pending_table_rows.drain(..) {
-                            // Pad cells to column widths
+                            // Pad cells to column widths with proper alignment
                             let padded_cells: Vec<String> = cells
                                 .iter()
                                 .enumerate()
                                 .map(|(j, cell)| {
                                     let width =
-                                        table_col_widths.get(j).copied().unwrap_or(cell.len());
-                                    format!("{:width$}", cell, width = width)
+                                        table_col_widths.get(j).copied().unwrap_or(cell.width());
+                                    let alignment = table_alignments
+                                        .get(j)
+                                        .copied()
+                                        .unwrap_or(ColumnAlignment::None);
+                                    // Pad based on unicode display width, not byte length
+                                    let cell_width = cell.width();
+                                    let padding = width.saturating_sub(cell_width);
+                                    match alignment {
+                                        ColumnAlignment::Right => {
+                                            format!("{}{}", " ".repeat(padding), cell)
+                                        }
+                                        ColumnAlignment::Center => {
+                                            let left_pad = padding / 2;
+                                            let right_pad = padding - left_pad;
+                                            format!("{}{}{}", " ".repeat(left_pad), cell, " ".repeat(right_pad))
+                                        }
+                                        ColumnAlignment::Left | ColumnAlignment::None => {
+                                            format!("{}{}", cell, " ".repeat(padding))
+                                        }
+                                    }
                                 })
                                 .collect();
 
@@ -284,7 +448,10 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                                 kind: StyledLineKind::TableRow {
                                     cells: padded_cells,
                                     is_header,
+                                    alignments: table_alignments.clone(),
                                 },
+                                section_id: current_section_id,
+                                source_line: event_source_line,
                             });
 
                             // Header separator after first row
@@ -293,6 +460,8 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                                     kind: StyledLineKind::TableBorder(
                                         TableBorderKind::HeaderSeparator(table_col_widths.clone()),
                                     ),
+                                    section_id: current_section_id,
+                                    source_line: event_source_line,
                                 });
                             }
                         }
@@ -302,21 +471,26 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                             kind: StyledLineKind::TableBorder(TableBorderKind::Bottom(
                                 table_col_widths.clone(),
                             )),
+                            section_id: current_section_id,
+                            source_line: event_source_line,
                         });
                     }
 
                     in_table = false;
                     lines.push(StyledLine {
                         kind: StyledLineKind::Empty,
+                        section_id: current_section_id,
+                        source_line: event_source_line,
                     });
                 }
                 TagEnd::TableHead => {
                     // Finalize header row
                     for (i, cell) in current_row_cells.iter().enumerate() {
+                        let cell_width = cell.width();
                         if i >= table_col_widths.len() {
-                            table_col_widths.push(cell.len());
+                            table_col_widths.push(cell_width);
                         } else {
-                            table_col_widths[i] = table_col_widths[i].max(cell.len());
+                            table_col_widths[i] = table_col_widths[i].max(cell_width);
                         }
                     }
                     pending_table_rows.push((current_row_cells.clone(), true)); // Header
@@ -327,10 +501,11 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                     // Finalize body row
                     if table_header_done {
                         for (i, cell) in current_row_cells.iter().enumerate() {
+                            let cell_width = cell.width();
                             if i >= table_col_widths.len() {
-                                table_col_widths.push(cell.len());
+                                table_col_widths.push(cell_width);
                             } else {
-                                table_col_widths[i] = table_col_widths[i].max(cell.len());
+                                table_col_widths[i] = table_col_widths[i].max(cell_width);
                             }
                         }
 
@@ -347,31 +522,31 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                 if in_code_block {
                     // Start code block with header if not done yet
                     if !code_block_started {
-                        lines.push(StyledLine {
-                            kind: StyledLineKind::CodeBlockBorder(CodeBlockBorderKind::Top),
-                        });
+                        // Header includes the top border (╭─ icon lang ─╮)
                         lines.push(StyledLine {
                             kind: StyledLineKind::CodeBlockHeader {
                                 language: code_block_lang.clone(),
+                                blockquote_depth,
                             },
-                        });
-                        lines.push(StyledLine {
-                            kind: StyledLineKind::CodeBlockBorder(
-                                CodeBlockBorderKind::HeaderSeparator,
-                            ),
+                            section_id: current_section_id,
+                            source_line: event_source_line,
                         });
                         code_block_started = true;
                     }
 
                     // Add each line of code with syntax highlighting
                     let highlighter = SyntaxHighlighter::new();
-                    for line in text.lines() {
+                    for (i, line) in text.lines().enumerate() {
                         let highlighted = highlighter.highlight(line, &code_block_lang);
                         lines.push(StyledLine {
                             kind: StyledLineKind::CodeBlockContent {
                                 content: line.to_string(),
                                 highlighted,
+                                line_number: i + 1,
+                                blockquote_depth,
                             },
+                            section_id: current_section_id,
+                            source_line: event_source_line + i,
                         });
                     }
                 } else if in_table {
@@ -382,7 +557,26 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                         current_row_cells.push(text.to_string());
                     }
                 } else {
-                    let segment = if in_bold && in_italic {
+                    let segment = if in_link {
+                        // Detect autolink: text matches URL (with or without protocol)
+                        let text_str = text.to_string();
+                        let is_autolink = text_str == link_url
+                            || link_url.ends_with(&text_str)
+                            || text_str.starts_with("http://")
+                            || text_str.starts_with("https://");
+                        let show_icon = !link_icon_shown;
+                        link_icon_shown = true; // Mark that we've shown the icon
+                        TextSegment::Link {
+                            text: text_str,
+                            url: link_url.clone(),
+                            is_autolink,
+                            bold: in_bold,
+                            italic: in_italic,
+                            show_icon,
+                        }
+                    } else if in_strikethrough {
+                        TextSegment::Strikethrough(text.to_string())
+                    } else if in_bold && in_italic {
                         TextSegment::BoldItalic(text.to_string())
                     } else if in_bold {
                         TextSegment::Bold(text.to_string())
@@ -406,6 +600,16 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
                     current_segments.push(TextSegment::InlineCode(code.to_string()));
                 }
             }
+            Event::TaskListMarker(checked) => {
+                // Add checkbox segment at the start of the list item
+                use super::styled_line::CheckboxState;
+                let state = if checked {
+                    CheckboxState::Checked
+                } else {
+                    CheckboxState::Unchecked
+                };
+                current_segments.insert(0, TextSegment::Checkbox(state));
+            }
             Event::SoftBreak => {
                 if !in_code_block && !in_table {
                     current_segments.push(TextSegment::Plain(" ".to_string()));
@@ -413,16 +617,20 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
             }
             Event::HardBreak => {
                 if !in_code_block {
-                    flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
+                    flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, event_source_line);
                 }
             }
             Event::Rule => {
-                flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
+                flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, event_source_line);
                 lines.push(StyledLine {
                     kind: StyledLineKind::HorizontalRule,
+                    section_id: current_section_id,
+                    source_line: event_source_line,
                 });
                 lines.push(StyledLine {
                     kind: StyledLineKind::Empty,
+                    section_id: current_section_id,
+                    source_line: event_source_line,
                 });
             }
             _ => {}
@@ -430,7 +638,7 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
     }
 
     // Flush any remaining content
-    flush_paragraph(&mut lines, &mut current_segments, in_blockquote);
+    flush_paragraph(&mut lines, &mut current_segments, blockquote_depth, current_section_id, last_event_source_line);
 
     // Remove trailing empty lines
     while matches!(lines.last(), Some(l) if matches!(l.kind, StyledLineKind::Empty)) {
@@ -440,6 +648,8 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
     if lines.is_empty() {
         lines.push(StyledLine {
             kind: StyledLineKind::Empty,
+            section_id: None,
+            source_line: 1,
         });
     }
 
@@ -450,7 +660,9 @@ pub fn render_markdown_to_styled_lines_with_frontmatter_state(
 fn flush_paragraph(
     lines: &mut Vec<StyledLine>,
     segments: &mut Vec<TextSegment>,
-    in_blockquote: bool,
+    blockquote_depth: usize,
+    section_id: Option<usize>,
+    source_line: usize,
 ) {
     if segments.is_empty() {
         return;
@@ -458,13 +670,20 @@ fn flush_paragraph(
 
     let content = std::mem::take(segments);
 
-    if in_blockquote {
+    if blockquote_depth > 0 {
         lines.push(StyledLine {
-            kind: StyledLineKind::Blockquote(content),
+            kind: StyledLineKind::Blockquote {
+                content,
+                depth: blockquote_depth,
+            },
+            section_id,
+            source_line,
         });
     } else {
         lines.push(StyledLine {
             kind: StyledLineKind::Paragraph(content),
+            section_id,
+            source_line,
         });
     }
 }
